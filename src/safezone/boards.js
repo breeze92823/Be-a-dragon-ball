@@ -77,6 +77,7 @@ export function buildBoards(scene, signs, labels) {
     if (net.room === hooked) return
     hooked = net.room
     hooked?.onMessage('leaderboard', apply)
+    if (net.leaderboard) apply(net.leaderboard) // the list that arrived before these boards existed
   }
   let room = net.room
   Object.defineProperty(net, 'room', {

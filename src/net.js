@@ -18,6 +18,7 @@ import { toast } from './toast.js'
 export const net = {
   base: -1, // the base (plot index) the server assigned this player; -1 until it answers
   room: null,
+  leaderboard: null, // the server's last `leaderboard` message
   connected: false,
   loaded: false, // the server has answered progress / noProgress for the current identity
   canSave: false, // false after a serverError (never overwrite a save we could not read)
@@ -138,7 +139,9 @@ function attach(room) {
     net.canSave = false
     toast('Could not load your save', 'Progress will not be saved this session', '#ff8a6a')
   })
-  for (const type of ['leaderboard']) room.onMessage(type, () => {}) // not used yet (ui/server.js handles spins, daily, fuse)
+  // The safe zone boards are built after the join, and the server only re-sends the lists every minute:
+  // keep the last one so a board built later paints it at once (safezone/boards.js).
+  room.onMessage('leaderboard', (msg) => (net.leaderboard = msg)) // ui/server.js handles spins, daily, fuse
   // Boxity's friend toasts: tell it who was already here (playerInRoom) and each arrival (playerJoined).
   // Boxity matches friends by the permanent username, which the server only knows once the player's token
   // is verified, so a player is reported when their `handle` arrives (or after a few seconds without one).
