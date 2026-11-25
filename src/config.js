@@ -97,7 +97,7 @@ RARITIES.push({ name: 'Divine', color: '#fff27a', income: [1e18, 9e18], aura: tr
 // carried into the base and hatched into a fighter of the zone's rarity, which
 // then has to run back to the safe zone before the angry guardian catches it.
 export const LANE = {
-  startSpeed: 2000, // Speed stat a new player starts with (treadmills raise it later)
+  startSpeed: 10, // Speed stat a new player starts with (treadmills raise it later)
   // Speed stat -> m/s: base + perDecade * log10(1 + stat / 1000), capped.
   speedCurve: { base: 8, perDecade: 6, max: 46 },
   corridor: { width: 64, length: 90, wallHeight: 14 }, // zones after the desert
