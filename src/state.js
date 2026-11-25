@@ -119,8 +119,29 @@ export function hydrate(doc) {
   if (typeof doc.autoCollectOn === 'boolean') state.autoCollectOn = doc.autoCollectOn
   if (typeof doc.upgradeMax === 'boolean') state.upgradeMax = doc.upgradeMax
   state.selected = -1
+  const gained = creditOffline(doc.offlineSeconds)
   changed()
-  dirty = false // this IS the saved state
+  dirty = gained > 0 // this IS the saved state, except the offline pad money just added
+  return gained
+}
+
+// Offline earnings: while the player was away (server clock, capped by the server) every placed fighter
+// kept earning into its slot's pad. It lands on the pads, never in cash: the player collects it. Boosts
+// are left out (the x2 Money boost may have run out meanwhile). -> the total credited.
+function creditOffline(seconds) {
+  if (typeof seconds !== 'number' || !(seconds >= 1)) return 0
+  const secs = Math.min(seconds, BASE.offlineMaxHours * 3600)
+  let total = 0
+  for (const sl of state.slots.slice(0, BASE.slots)) {
+    if (!sl.fighter) continue
+    const perSec = sl.fighter.income * (1 + BASE.levelIncome * (sl.level - 1)) * BASE.cashMulti * baseMulti() * moneyMulti()
+    const earned = perSec * secs
+    if (earned >= 0 && Number.isFinite(earned)) {
+      sl.stored = (sl.stored || 0) + earned
+      total += earned
+    }
+  }
+  return total
 }
 
 // saver(snapshot) -> true when sent (net.js); until it succeeds the changes stay pending.
@@ -129,8 +150,16 @@ export function setSaver(fn) {
   saver = fn
 }
 let saveIn = 0
+let idleIn = 30
 export function tickSave(dt) {
   saveIn -= dt
+  // Pad money grows without a state change: save it now and then so a crash loses at most this much
+  // (and the server's away clock restarts from a real save).
+  idleIn -= dt
+  if (idleIn <= 0) {
+    idleIn = 30
+    if (state.slots.some((sl) => sl.fighter)) dirty = true
+  }
   if (!dirty || saveIn > 0 || !saver) return
   saveIn = 3
   if (saver(snapshot())) dirty = false

@@ -139,6 +139,7 @@ export const BASE = {
   upgradeGrowth: 1.8,
   levelIncome: 0.5, // + this share of base income per level above 1
   cashMulti: 1, // the base's cash multiplier (rebirths raise it later)
+  offlineMaxHours: 12, // offline earnings pile up on the pads for at most this long (backend OFFLINE_MAX_SECONDS)
 }
 
 // Your base's entrance boards (base/board.js): the control board's four buttons and the Base

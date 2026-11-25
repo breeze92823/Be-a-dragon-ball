@@ -14,6 +14,7 @@ import { NET } from './config.js'
 import { authState, canResolveServer, getLookJson, launchRoomId, locateRoom, canonicalRoomKey, getOutfitKey, getPfp, getToken, playerInRoom, playerJoined, resolveServerEndpoint, subscribeAuth, updateRoom } from './bloxity.js'
 import { hydrate, setSaver, snapshot } from './state.js'
 import { toast } from './toast.js'
+import { short } from './safezone/text.js'
 
 export const net = {
   base: -1, // the base (plot index) the server assigned this player; -1 until it answers
@@ -126,8 +127,9 @@ function attach(room) {
   net.loaded = false
   net.canSave = true
   room.onMessage('progress', (doc) => {
-    hydrate(doc)
+    const away = hydrate(doc)
     net.loaded = true
+    if (away >= 1 && doc?.offlineSeconds >= 60) toast('Welcome back!', `Your fighters earned $${short(away)} while you were away. Collect it from your base pads.`, '#9dff3a')
   })
   room.onMessage('base', (m) => (net.base = Number.isInteger(m?.index) ? m.index : -1))
   room.onMessage('noProgress', () => {
