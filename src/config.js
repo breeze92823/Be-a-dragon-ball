@@ -1,7 +1,7 @@
 // Every tunable constant lives here; the rest of src/ holds no theme values.
 
 // --- Identity -------------------------------------------------------------
-export const GAME_SLUG = 'bowling-roll' // slug registered on bloxity.io
+export const GAME_SLUG = 'be-a-dragon-ball' // slug registered on bloxity.io
 export const GAME_TITLE = 'Bowling Roll'
 
 // Forces the Bloxity SDK and avatar CDN to be treated as unavailable (see .env.example).
