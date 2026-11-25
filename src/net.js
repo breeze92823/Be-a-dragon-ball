@@ -9,9 +9,9 @@
 // offline play, retried in the background with backoff. Saves are the whole snapshot
 // (state.snapshot()), sent by state.tickSave() through the saver set here, at most every
 // NET.saveEvery s, and flushed when the tab is hidden or closed.
-import { Client, getStateCallbacks } from '@colyseus/sdk'
+import { Client } from '@colyseus/sdk'
 import { NET } from './config.js'
-import { authState, canResolveServer, getLookJson, getOutfitKey, getPfp, getToken, playerInRoom, playerJoined, resolveServerEndpoint, subscribeAuth, updateRoom } from './bloxity.js'
+import { authState, canResolveServer, getLookJson, launchRoomId, locateRoom, getOutfitKey, getPfp, getToken, playerInRoom, playerJoined, resolveServerEndpoint, subscribeAuth, updateRoom } from './bloxity.js'
 import { hydrate, setSaver, snapshot } from './state.js'
 import { toast } from './toast.js'
 
@@ -95,11 +95,13 @@ export function sendOutfit() {
 
 // The base the world was built around: the join asks for it, so a rejoin keeps the same plot.
 export const hint = { base: -1 }
+// After a one-off reload around a different plot the page carries it in the URL (?dbzBase=n); nothing is
+// stored in the browser.
 try {
-  const saved = Number(sessionStorage.getItem('dbz.base'))
-  if (Number.isInteger(saved) && saved >= 0) hint.base = saved
+  const asked = Number(new URLSearchParams(location.search).get('dbzBase'))
+  if (Number.isInteger(asked) && asked >= 0) hint.base = asked
 } catch {
-  // Storage blocked: the server picks.
+  // No URL: the server picks.
 }
 // Resolves with the assigned base index once the server has answered, or null after `ms` (offline / slow).
 export function whenBase(ms) {
@@ -137,18 +139,24 @@ function attach(room) {
     toast('Could not load your save', 'Progress will not be saved this session', '#ff8a6a')
   })
   for (const type of ['leaderboard']) room.onMessage(type, () => {}) // not used yet (ui/server.js handles spins, daily, fuse)
-  // Friend-join toasts: who was already here, then each arrival (Boxity only toasts friends).
-  try {
-    const joinedAt = performance.now()
-    const $ = getStateCallbacks(room)
-    $(room.state).players.onAdd((p, key) => {
-      if (key === room.sessionId || !p?.username) return
-      if (performance.now() - joinedAt < 1500) playerInRoom(p.username)
-      else playerJoined(p.username)
+  // Boxity's friend toasts: tell it who was already here (playerInRoom) and each arrival (playerJoined).
+  // Boxity matches friends by the permanent username, which the server only knows once the player's token
+  // is verified, so a player is reported when their `handle` arrives (or after a few seconds without one).
+  const joinedAt = performance.now()
+  const seen = new Map() // sessionId -> { at, done }
+  const report = setInterval(() => {
+    if (net.room !== room) return clearInterval(report)
+    const now = performance.now()
+    room.state?.players?.forEach((p, id) => {
+      if (id === room.sessionId) return
+      const s = seen.get(id) ?? seen.set(id, { at: now, early: now - joinedAt < 2500, done: false }).get(id)
+      if (s.done || (!p.handle && now - s.at < 4000)) return
+      s.done = true
+      const name = p.handle || p.username
+      if (name) (s.early ? playerInRoom : playerJoined)(name)
     })
-  } catch {
-    // Cosmetic: no roster callbacks, no toasts.
-  }
+    for (const id of [...seen.keys()]) if (!room.state?.players?.has(id)) seen.delete(id)
+  }, 500)
   room.onLeave(() => {
     if (net.room !== room) return
     sentPose = ''
@@ -163,6 +171,7 @@ function attach(room) {
 }
 
 let connecting = false
+let launchOnce = false // the ?roomId= of the page is tried on the first connect only
 let retryIn = NET.retry
 async function connect() {
   if (!hasServer() || connecting || net.connected) return
@@ -174,15 +183,33 @@ async function connect() {
     const options = { userId: id.userId, username: id.username, pfp: getPfp(), token: isGuest(id.userId) ? '' : getToken(), avatar: getOutfitKey(), look: getLookJson(), base: hint.base, ...lastPose }
     const url = serverUrl()
     let room
+    let relay = ''
     if (url) room = await new Client(url).joinOrCreate(NET.room, options)
     else {
-      const { endpoint } = await resolveServerEndpoint(isGuest(id.userId) ? undefined : id.userId)
-      room = await new Client(endpoint).joinOrCreate(NET.room, options)
+      // Arrived from a friend's invite or the game page's Open Rooms Join button (?roomId=): join that very
+      // room through the pod that holds it; when it is gone or full, fall back to normal matchmaking.
+      const launch = launchOnce ? '' : launchRoomId()
+      launchOnce = true
+      const target = launch ? await locateRoom(launch).catch(() => null) : null
+      if (target) {
+        try {
+          room = await new Client(target.endpoint).joinById(target.roomId, options)
+          relay = target.relayRoomId || ''
+        } catch (err) {
+          console.info('[net] the invited room is full or gone; matchmaking instead', err?.message ?? err)
+        }
+      }
+      if (!room) {
+        const found = await resolveServerEndpoint(isGuest(id.userId) ? undefined : id.userId)
+        room = await new Client(found.endpoint).joinOrCreate(NET.room, options)
+        relay = found.relayRoomId || ''
+      }
     }
     sentId = id.userId
     retryIn = NET.retry
     attach(room)
-    updateRoom(room.roomId)
+    // Friends are invited into the room reported here, so it names the pod's relay too: "<relay>~<room>".
+    updateRoom(relay ? `${relay}~${room.roomId}` : room.roomId)
     console.info(`[net] joined ${NET.room} ${room.roomId} as ${room.sessionId}`)
   } catch (err) {
     console.info(`[net] no game server (retrying in ${retryIn}s); progress is not saved meanwhile`, err?.message ?? err)

@@ -34,14 +34,9 @@ export function onStart(fn) {
   else startHooks.push(fn)
 }
 
-// --- Volume + mute (persisted) ---------------------------------------------------
+// --- Volume + mute (never persisted) ---------------------------------------------------
 let volume = AUDIO.volume
-let muted = false
-try {
-  muted = localStorage.getItem(AUDIO.storageKey) === 'muted'
-} catch {
-  // Storage blocked: unmuted.
-}
+let muted = false // session only: nothing is kept in the browser (the portal's master_volume owns the level)
 let adMuted = false // an ad break is playing over the game (Boxity runs the ad)
 const level = () => (muted || adMuted ? 0 : volume * volume) // perceptual: the slider feels even
 function applyLevel(t = 0.05) {
@@ -58,11 +53,6 @@ export function setAdMuted(on) {
 }
 export function setMuted(on) {
   muted = !!on
-  try {
-    localStorage.setItem(AUDIO.storageKey, muted ? 'muted' : 'on')
-  } catch {
-    // Storage blocked: this session only.
-  }
   applyLevel()
 }
 export const toggleMuted = () => setMuted(!muted)

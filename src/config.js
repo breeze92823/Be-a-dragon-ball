@@ -330,7 +330,6 @@ export const CAMERA = {
 // with smoothed ramps only, so overlapping sounds never clip, click or pile up.
 export const AUDIO = {
   volume: 0.8,
-  storageKey: 'be-a-dragon-ball.sound',
   buses: { ui: 0.8, sfx: 0.9, amb: 0.55, engine: 0.5 },
   duck: 0.45, // world level while a menu window is open
   maxVoices: 40,

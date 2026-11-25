@@ -2,7 +2,8 @@ import * as THREE from 'three'
 import { ACESFilmicToneMapping, Clock, Group, PCFSoftShadowMap, PerspectiveCamera, Scene, SRGBColorSpace, Vector3, WebGLRenderer } from 'three'
 import { BASE, CAMERA, graphicsPreset, RENDER, SAFE_ZONE } from './config.js'
 import * as bloxity from './bloxity.js'
-import { install as installInput, onKey } from './input.js'
+import { ignoreNextUnlock, install as installInput, onKey } from './input.js'
+import { isOpen as isWindowOpen } from './ui/shell.js'
 import { installTouch } from './touch.js'
 import { createPlayerBody, interpolate as interpolatePlayer, player, resetPlayer, respawn } from './player.js'
 import { setCameraSensitivity, syncYawToPlayer, update as updateCamera } from './camera.js'
@@ -75,7 +76,7 @@ renderer.shadowMap.enabled = preset.shadows
 renderer.shadowMap.type = PCFSoftShadowMap
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, preset.dpr))
 document.body.appendChild(renderer.domElement)
-installInput(() => bloxity.showMenu(), renderer.domElement) // Esc opens the portal menu
+installInput(() => bloxity.showMenu(), renderer.domElement, () => !isWindowOpen()) // Esc opens the portal menu
 
 const scene = new Scene()
 const camera = new PerspectiveCamera(CAMERA.fov, 1, CAMERA.near, CAMERA.far)
@@ -104,25 +105,16 @@ const world = createWorld(scene) // clouds
 bloxity.loadingStep('Joining the room')
 const builtBase = (await whenBase(6000)) ?? (hint.base >= 0 ? hint.base : BASE_DEFAULT)
 hint.base = builtBase
-try {
-  sessionStorage.setItem('dbz.base', String(builtBase))
-} catch {
-  // Storage blocked.
-}
 bloxity.loadingStep('Building the safe zone')
 const safeZone = await buildSafeZone(scene, { base: builtBase })
 const remoteBases = createRemoteBases(scene, safeZone.plots, builtBase, () => ({ name: bloxity.displayName(), pfp: bloxity.getPfp(), multi: baseMulti() }))
 // A late join can be given another plot than the one built (it was taken meanwhile): rebuild once around it.
 setInterval(() => {
   if (net.base < 0 || net.base === builtBase) return
-  try {
-    if (Date.now() - Number(sessionStorage.getItem('dbz.reloadAt') || 0) < 30000) return
-    sessionStorage.setItem('dbz.reloadAt', String(Date.now()))
-    sessionStorage.setItem('dbz.base', String(net.base))
-  } catch {
-    return
-  }
-  location.reload()
+  const url = new URL(location.href)
+  if (url.searchParams.has('dbzBase')) return // already reloaded once around a plot: never loop
+  url.searchParams.set('dbzBase', String(net.base))
+  location.replace(url)
 }, 1000)
 installFx(scene)
 createPlayerBody()
@@ -231,7 +223,10 @@ bloxity.onRespawnRequest(respawnAll)
 bloxity.onPlayerEvent((event, data) => {
   if (event === 'play_emote') emoteClip(String(data)).then((clip) => clip && animator?.playEmote(clip))
   else if (event === 'stop_emote') animator?.stopEmote()
-  else if (event === 'pointer_lock_changed' && !data && document.pointerLockElement) document.exitPointerLock?.()
+  else if (event === 'pointer_lock_changed' && !data && document.pointerLockElement) {
+    ignoreNextUnlock() // the portal's own menu is open already
+    document.exitPointerLock?.()
+  }
 })
 bloxity.onChat((message, text) => {
   if (!text) return

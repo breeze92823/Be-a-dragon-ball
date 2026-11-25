@@ -1,4 +1,4 @@
-import { setTouchMove } from '../input.js'
+import { ignoreNextUnlock, setTouchMove } from '../input.js'
 import { reportScreen } from '../bloxity.js'
 import { setDucked } from '../audio/core.js'
 import { short } from '../safezone/text.js'
@@ -45,7 +45,10 @@ export function openWindow(id) {
   const w = windows.get(id)
   if (!w) return
   if (current && current !== w) closeWindow()
-  if (document.pointerLockElement) document.exitPointerLock?.()
+  if (document.pointerLockElement) {
+    ignoreNextUnlock() // opening a window frees the mouse; that is not an Esc
+    document.exitPointerLock?.()
+  }
   setTouchMove(0, 0)
   current = w
   w.layer.classList.add('open')

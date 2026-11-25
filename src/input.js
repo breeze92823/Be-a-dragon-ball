@@ -59,10 +59,20 @@ export function setTouchSprint(on) {
   recomputeMove()
 }
 
-export function install(showMenu, canvasEl) {
+// Chrome swallows the Esc keydown that releases the captured mouse, so the browser's own unlock is the
+// signal that Esc was pressed: it opens the Boxity menu (a window opening or the portal releasing the
+// mouse is not).
+let ignoreUnlockUntil = 0
+export const ignoreNextUnlock = () => (ignoreUnlockUntil = performance.now() + 400)
+
+export function install(showMenu, canvasEl, menuOnUnlock = () => true) {
   canvas = canvasEl
+  let wasLocked = false
   document.addEventListener('pointerlockchange', () => {
-    if (isLocked()) orbiting = false
+    const now = isLocked()
+    if (now) orbiting = false
+    if (wasLocked && !now && performance.now() > ignoreUnlockUntil && menuOnUnlock()) showMenu()
+    wasLocked = now
   })
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement) return
