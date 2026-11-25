@@ -3,7 +3,7 @@ import { changed, state } from '../state.js'
 import { toast } from '../toast.js'
 import { sfx } from '../audio/index.js'
 import { button, clock, createWindow, el, isOpen, money } from './shell.js'
-import { buySpins, onView, serverNow, spinWheel, view } from './server.js'
+import { buySpins, canWatchAd, onView, serverNow, spinWheel, view, watchAdForSpin } from './server.js'
 import { cashNeeded } from './rebirth.js'
 import { describe, grant, ICON } from './rewards.js'
 
@@ -61,7 +61,15 @@ export function createSpin({ hud }) {
   const next = el('div', 'sp-sub ol', '')
   spinWrap.append(spinBtn, next)
   row.append(packBtns[0].wrap, spinWrap, packBtns[1].wrap)
-  w.body.append(stage, row)
+  // Rewarded ad: +1 spin (only where Boxity serves ads; the server verifies the ad's token).
+  const adBtn = button('ui-btn sp-ad', 'Watch an ad: +1 Spin', async () => {
+    adBtn.classList.add('off')
+    const r = await watchAdForSpin()
+    if (r?.ok) toast('+1 Spin!', 'Thanks for watching', '#7dff5a')
+    else if (r?.reason && !['skipped', 'disabled'].includes(r.reason)) toast('No ad right now', 'Try again later', '#ff8a6a')
+    refresh()
+  })
+  w.body.append(stage, row, adBtn)
 
   let angle = 0
   let spinning = false
@@ -72,6 +80,8 @@ export function createSpin({ hud }) {
     spinBtn.textContent = `Spin (${s?.spins ?? 0})`
     spinBtn.classList.toggle('off', spinning || !s?.spins)
     const left = s ? (s.nextAt - serverNow()) / 1000 : 0
+    adBtn.style.display = canWatchAd() ? '' : 'none'
+    adBtn.classList.toggle('off', !canWatchAd())
     next.textContent = !s ? 'Loading...' : left > 0 ? `Free spin in ${clock(left)}` : 'Free spin ready!'
     SPIN.packs.forEach((p, k) => {
       packBtns[k].b.textContent = money(price(p))

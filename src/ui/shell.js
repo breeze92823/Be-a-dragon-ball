@@ -1,4 +1,5 @@
 import { setTouchMove } from '../input.js'
+import { reportScreen } from '../bloxity.js'
 import { setDucked } from '../audio/core.js'
 import { short } from '../safezone/text.js'
 
@@ -49,6 +50,7 @@ export function openWindow(id) {
   current = w
   w.layer.classList.add('open')
   setDucked(true)
+  reportScreen('panel') // Boxity draws its banners around an open window
   w.onOpen?.()
 }
 
@@ -58,6 +60,7 @@ export function closeWindow() {
   current = null
   w.layer.classList.remove('open')
   setDucked(false)
+  reportScreen('gameplay')
   w.onClose?.()
 }
 

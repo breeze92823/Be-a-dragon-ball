@@ -57,13 +57,6 @@ export function createBaseBoard(scene, boards, { camera, canvas, hud, myBase }) 
     scene.add(m)
     faces.push(m)
   }
-  // Owner label with the live Cash Multi (the Base Upgrade raises it).
-  const owner = new DynLabel(420, 110, 0.95, (ctx, w, h, v) =>
-    paintLines(ctx, [{ t: '@You', px: 40, color: '#ffffff' }, { t: `Cash Multi: x${v}`, px: 40, color: '#ffe14a' }], w),
-  )
-  owner.sprite.center.set(0.5, 0)
-  owner.sprite.position.set(boards.label.x, boards.label.y, boards.label.z)
-  scene.add(owner.sprite)
 
   // --- State -> view ---
   const upPrices = BASE_BOARD.upgrade.prices
@@ -90,7 +83,6 @@ export function createBaseBoard(scene, boards, { camera, canvas, hud, myBase }) 
     const key = JSON.stringify(view)
     controls.set(key)
     upgrade.set(key)
-    owner.set(String(fmt(baseMulti())))
   }
   let dirty = true
   onState(() => (dirty = true))

@@ -270,6 +270,17 @@ export function createLane(scene, { hud, playerGroup, getAvatar }) {
     get carrying() {
       return form === 'human' && !!heldActor
     },
+    // How the other players draw you (presence): human, the rolling orb (also while a guardian
+    // holds it / it hatches) or the hatched fighter running home (also while eaten).
+    get presenceForm() {
+      return form === 'human' ? 'human' : form === 'orb' || form === 'caught' || form === 'hatching' ? 'orb' : 'fighter'
+    },
+    get fighterLook() {
+      return form === 'fighter' || form === 'tongued' || form === 'eaten' ? pending?.look ?? null : null
+    },
+    get heldLook() {
+      return form === 'human' && heldActor ? held()?.look ?? null : null
+    },
     get shake() {
       return shake
     },

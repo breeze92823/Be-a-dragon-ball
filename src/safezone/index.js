@@ -20,7 +20,7 @@ import { buildStalls } from './stalls.js'
 
 const Z = SAFE_ZONE
 
-export async function buildSafeZone(scene) {
+export async function buildSafeZone(scene, { base } = {}) {
   // Signs are painted once, so wait (briefly) for the Fredoka web font.
   await Promise.race([fontReady, new Promise((r) => setTimeout(r, 1500))])
   const signs = new SignAtlas(2048)
@@ -29,7 +29,7 @@ export async function buildSafeZone(scene) {
 
   const ground = buildGround(scene, signs)
   const board = buildBoards(scene, signs, farLabels)
-  const bases = buildBases(scene, signs, nearLabels)
+  const bases = buildBases(scene, signs, nearLabels, base)
   const stalls = buildStalls(scene, signs, farLabels)
   nearLabels.build()
   farLabels.build()
@@ -98,6 +98,7 @@ export async function buildSafeZone(scene) {
     setBaseSkin: (skin) => bases.skin?.setSkin(skin),
     spinWheel: stalls.wheel,
     mySlots: bases.mySlots,
+    plots: bases.plots, // every plot: { x, slots, card } (remotebases.js fills them from the roster)
     homeZone: bases.homeZone,
     myBoards: bases.boards, // your base's board panels + owner label spot (base/board.js)
     fuse,

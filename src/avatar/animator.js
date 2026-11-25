@@ -5,7 +5,8 @@
 // stay planted at any speed. Writes only to bones and the avatar root's
 // rotation / position.y (the player group owns world placement).
 import { ANIM } from '../config.js'
-import { BONE_INDEX, PlayerRig, PoseBuffer } from './rig.js'
+import { BONE_INDEX, BONE_NAMES, PlayerRig, PoseBuffer } from './rig.js'
+import { EmotePlayer } from './emotes.js'
 
 const TAU = Math.PI * 2
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v)
@@ -45,9 +46,19 @@ class PlayerAnimator {
     this.airTime = 0
     this.bank = 0
     this.carry = 0 // 0..1 eased weight of the carrying-in-front arm pose
+    this.emote = new EmotePlayer(root, BONE_NAMES) // Boxity emotes layered over the pose
+  }
+
+  playEmote(clip) {
+    return this.emote.play(clip)
+  }
+
+  stopEmote() {
+    this.emote.stop()
   }
 
   dispose() {
+    this.emote.stop()
     this.rig.resetToBindPose()
     this.root.rotation.set(0, 0, 0)
     this.root.position.y = 0
@@ -63,6 +74,9 @@ class PlayerAnimator {
     this.carry += ((input.carry ? 1 : 0) - this.carry) * (1 - Math.exp(-10 * dt))
     if (this.carry > 0.002) this.applyCarry(this.carry)
     this.rig.applyPose(this.output)
+    // An emote ends the moment the player moves or leaves the ground.
+    if (this.emote.active && (input.speed > L.idleSpeed || !input.grounded)) this.emote.stop()
+    this.emote.update(dt)
     this.applyVisual(dt, input)
   }
 

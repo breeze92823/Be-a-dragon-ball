@@ -9,13 +9,14 @@
 // offline play, retried in the background with backoff. Saves are the whole snapshot
 // (state.snapshot()), sent by state.tickSave() through the saver set here, at most every
 // NET.saveEvery s, and flushed when the tab is hidden or closed.
-import { Client } from '@colyseus/sdk'
+import { Client, getStateCallbacks } from '@colyseus/sdk'
 import { NET } from './config.js'
-import { authState, canResolveServer, getPfp, resolveServerEndpoint, subscribeAuth, updateRoom } from './bloxity.js'
+import { authState, canResolveServer, getLookJson, getOutfitKey, getPfp, getToken, playerInRoom, playerJoined, resolveServerEndpoint, subscribeAuth, updateRoom } from './bloxity.js'
 import { hydrate, setSaver, snapshot } from './state.js'
 import { toast } from './toast.js'
 
 export const net = {
+  base: -1, // the base (plot index) the server assigned this player; -1 until it answers
   room: null,
   connected: false,
   loaded: false, // the server has answered progress / noProgress for the current identity
@@ -64,9 +65,60 @@ function save(snap) {
 }
 const flush = () => save(snapshot())
 
+// Presence: the others draw you from these (backend presence.ts). The pose goes ~10x/s while it
+// changes (and once a second otherwise), the outfit key whenever the look changes.
+let lastPose = {}
+let sentPose = ''
+let sentForm = ''
+let poseAt = 0
+// loadout = { form: 'human' | 'orb' | 'fighter', ball, fighter: look | null, held: look | null }: how
+// the others draw you. It is re-sent only when it changes.
+export function sendPose(x, y, z, yaw, speed, loadout, now) {
+  lastPose = { pose: { x, y, z, yaw, speed }, loadout }
+  if (now - poseAt < 100) return
+  const sig = `${x.toFixed(2)},${y.toFixed(2)},${z.toFixed(2)},${yaw.toFixed(2)},${speed.toFixed(1)}`
+  if (sig === sentPose && now - poseAt < 1000) return
+  if (send('pose', lastPose.pose)) {
+    const l = JSON.stringify(loadout)
+    if (l !== sentForm && send('loadout', loadout)) sentForm = l
+    sentPose = sig
+    poseAt = now
+  }
+}
+let sentKey = ''
+export function sendOutfit() {
+  const key = getOutfitKey()
+  const look = getLookJson()
+  if (key + look === sentKey) return
+  if (send('setAvatar', { avatar: key, look })) sentKey = key + look
+}
+
+// The base the world was built around: the join asks for it, so a rejoin keeps the same plot.
+export const hint = { base: -1 }
+try {
+  const saved = Number(sessionStorage.getItem('dbz.base'))
+  if (Number.isInteger(saved) && saved >= 0) hint.base = saved
+} catch {
+  // Storage blocked: the server picks.
+}
+// Resolves with the assigned base index once the server has answered, or null after `ms` (offline / slow).
+export function whenBase(ms) {
+  return new Promise((resolve) => {
+    const t0 = performance.now()
+    const poll = () => {
+      const mine = net.room?.state?.players?.get?.(net.room.sessionId)
+      if (mine && mine.base >= 0) return resolve(mine.base)
+      if (performance.now() - t0 > ms) return resolve(null)
+      setTimeout(poll, 80)
+    }
+    poll()
+  })
+}
+
 let sentId = ''
 function attach(room) {
   net.room = room
+  net.base = -1
   net.connected = true
   net.loaded = false
   net.canSave = true
@@ -74,6 +126,7 @@ function attach(room) {
     hydrate(doc)
     net.loaded = true
   })
+  room.onMessage('base', (m) => (net.base = Number.isInteger(m?.index) ? m.index : -1))
   room.onMessage('noProgress', () => {
     net.loaded = true // keep the fresh (or the guest's) state; it is saved from now on
     flush()
@@ -84,8 +137,23 @@ function attach(room) {
     toast('Could not load your save', 'Progress will not be saved this session', '#ff8a6a')
   })
   for (const type of ['leaderboard']) room.onMessage(type, () => {}) // not used yet (ui/server.js handles spins, daily, fuse)
+  // Friend-join toasts: who was already here, then each arrival (Boxity only toasts friends).
+  try {
+    const joinedAt = performance.now()
+    const $ = getStateCallbacks(room)
+    $(room.state).players.onAdd((p, key) => {
+      if (key === room.sessionId || !p?.username) return
+      if (performance.now() - joinedAt < 1500) playerInRoom(p.username)
+      else playerJoined(p.username)
+    })
+  } catch {
+    // Cosmetic: no roster callbacks, no toasts.
+  }
   room.onLeave(() => {
     if (net.room !== room) return
+    sentPose = ''
+    sentForm = ''
+    sentKey = ''
     net.room = null
     net.connected = false
     net.loaded = false
@@ -101,7 +169,9 @@ async function connect() {
   connecting = true
   try {
     const id = identity()
-    const options = { userId: id.userId, username: id.username, pfp: getPfp() }
+    // `token` is the player's Boxity token: the server verifies it with the platform and takes the
+    // account id from that (a deployed server ignores `userId`; it only serves local dev).
+    const options = { userId: id.userId, username: id.username, pfp: getPfp(), token: isGuest(id.userId) ? '' : getToken(), avatar: getOutfitKey(), look: getLookJson(), base: hint.base, ...lastPose }
     const url = serverUrl()
     let room
     if (url) room = await new Client(url).joinOrCreate(NET.room, options)
@@ -137,7 +207,7 @@ export function initNet() {
     flush()
     sentId = id.userId
     net.loaded = false
-    send('identify', { userId: id.userId, username: id.username, pfp: getPfp() })
+    send('identify', { userId: id.userId, username: id.username, pfp: getPfp(), token: isGuest(id.userId) ? '' : getToken() })
   })
   setTimeout(connect, 2000) // the SDK may never settle auth outside the portal
 }

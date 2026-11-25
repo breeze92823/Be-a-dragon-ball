@@ -55,21 +55,22 @@ export const SAFE_ZONE = {
   orbPack: { x: 54, z: 5, price: '$25M' },
   suggestions: { x: 56, z: 11.5 },
   eventBuilding: { x: -40, z: -66, minutes: 4 },
-  // Player bases along the south side, entrances facing north. level 0 = empty plot.
+  // Player bases along the south side, entrances facing north.
   bases: {
     frontZ: 16,
     width: 18,
     depth: 26,
     floorHeight: 7, // m between floors
     slotsPerSide: 5,
-    fill: 0.62, // share of slots with a fighter in other players' bases
+    fill: 0, // other players' fighters are the real ones relayed by the server (safezone/remotebases.js)
+    // One plot per player of a room (backend ROOM_MAX_CLIENTS = 5): the server assigns each player one by
+    // index. Every plot is the same one-floor base; its owner card / fighters come from the roster.
     plots: [
-      { x: -47.5, level: 4, owner: 'NovaBlitz', multi: 3 },
-      { x: -28.5, level: 2, owner: 'Mochi_Flash', multi: 1.5 },
-      { x: -9.5, level: 0 },
-      { x: 9.5, level: 1, owner: 'You', mine: true, multi: 1 },
-      { x: 28.5, level: 3, owner: 'PixelMonk', multi: 2 },
-      { x: 47.5, level: 0 },
+      { x: -38, level: 1 },
+      { x: -19, level: 1 },
+      { x: 0, level: 1 },
+      { x: 19, level: 1 },
+      { x: 38, level: 1 },
     ],
   },
 }
@@ -355,6 +356,8 @@ export const SETTINGS = {
   camera_sensitivity: { def: '1', type: 'number', min: 0.1, max: 5 },
   show_fps: { def: 'false', type: 'bool' },
   fullscreen: { def: 'false', type: 'bool' },
+  master_volume: { def: '80', type: 'number', min: 0, max: 100 },
+  music_volume: { def: '80', type: 'number', min: 0, max: 100 },
 }
 
 // The base rig, measured from player.glb: origin at the feet, 6.4 units tall at bind pose.

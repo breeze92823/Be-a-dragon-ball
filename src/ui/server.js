@@ -1,5 +1,6 @@
 import { DAILY, PLAYTIME, QUESTS, SPIN } from '../config.js'
 import { net } from '../net.js'
+import { adsAvailable, showRewardedAd } from '../bloxity.js'
 import { outcomes, rollFusion } from './fuserules.js'
 
 // The windows' link to the game server's clock-based systems (backend playtime.ts, quests.ts,
@@ -105,6 +106,7 @@ function bind(room) {
     if (typeof r?.spins === 'number') setSpins(r)
     waiting.spinResult?.(r)
   }))
+  room.onMessage('adResult', mine((r) => waiting.adResult?.(r)))
   room.onMessage('dailyResult', mine((r) => {
     keep(r)
     if (Array.isArray(r?.claimed)) setDaily(r)
@@ -309,6 +311,16 @@ export async function spinWheel() {
   }
   emit('spins')
   return { ok: true, id, spins: s.spins, nextAt: s.nextAt }
+}
+
+// Watch a rewarded ad (Boxity plays it) for one extra spin: the server checks the ad's single-use
+// token with Boxity before adding it. -> { ok, reason? } ('disabled' = no ads here, 'offline').
+export const canWatchAd = () => !!bound && adsAvailable()
+export async function watchAdForSpin() {
+  if (!bound) return { ok: false, reason: 'offline' }
+  const ad = await showRewardedAd('spin')
+  if (ad.status !== 'completed' || !ad.rewardToken) return { ok: false, reason: ad.status }
+  return request('adSpin', { rewardToken: ad.rewardToken }, 'adResult')
 }
 
 // A spin pack the player paid $ for (SPIN.packs index).

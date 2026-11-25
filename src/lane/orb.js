@@ -99,14 +99,15 @@ function buildWing(side, white, pink) {
   return wing
 }
 
-export function createOrb(scene) {
+// ballLook: the Dragon Ball skin to roll as (yours by default; remote players pass theirs).
+export function createOrb(scene, ballLook = () => equippedBall().look) {
   const root = new Group() // at the orb's centre, never rotates
   root.visible = false
   scene.add(root)
 
   const ball = new Mesh(
     new SphereGeometry(R, 40, 28),
-    new MeshPhysicalMaterial({ map: ballTexture(equippedBall().look), roughness: 0.28, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.12, sheen: 0.3, sheenColor: 0xffc0e0 }),
+    new MeshPhysicalMaterial({ map: ballTexture(ballLook()), roughness: 0.28, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.12, sheen: 0.3, sheenColor: 0xffc0e0 }),
   )
   ball.castShadow = true
   root.add(ball)
@@ -139,7 +140,7 @@ export function createOrb(scene) {
       root.visible = on
       if (on) pop = 0
       // The equipped Dragon Ball (Dragon Ball Shop) is the ball you roll as.
-      const map = ballTexture(equippedBall().look)
+      const map = ballTexture(ballLook())
       if (on && ball.material.map !== map) {
         ball.material.map = map
         ball.material.needsUpdate = true

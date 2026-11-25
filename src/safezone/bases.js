@@ -4,6 +4,7 @@ import { mulberry32 } from '../textures.js'
 import { M, S, box, boxC, mesh, bakeInto, solidLocal, solidRamp, deg } from './kit.js'
 import { strokeText, roundRect, short } from './text.js'
 import { buildFighter, fighterLook, fighterLabel, rollRarity } from './fighters.js'
+import { OwnerCard } from './ownercard.js'
 
 // Player bases (screenshots 1, 7-14). Each plot is 20 x 30 m with its entrance
 // facing the hub. A base has 1-4 stacked floors on pink pillars; each floor has
@@ -29,9 +30,13 @@ const SIGN_X = 3.35 // upgrade signs, leaning back toward the pedestals
 const LANDING_W = 3
 const STEP_RUN = B.width - 2 * LANDING_W // stair flight between the two landings
 
-export function buildBases(scene, signs, labels) {
-  const out = { auras: [], collectPads: [], houseIcons: [], homeZone: null, mySlots: [] }
-  B.plots.forEach((plot, pi) => buildBase(scene, signs, labels, plot, pi, out))
+// mineIndex: the plot the server assigned to this player (the others are built as other players' bases).
+// out.plots[i] = { x, slots: [slot info], card } for every plot: the owner card and the fighter spots the
+// roster fills in (safezone/remotebases.js); out.mySlots / boards / homeZone / skin are your own plot's.
+export const BASE_DEFAULT = 2
+export function buildBases(scene, signs, labels, mineIndex = BASE_DEFAULT) {
+  const out = { auras: [], collectPads: [], houseIcons: [], homeZone: null, mySlots: [], plots: [] }
+  B.plots.forEach((p, pi) => buildBase(scene, signs, labels, { ...p, mine: pi === mineIndex }, pi, out))
   return out
 }
 
@@ -40,6 +45,8 @@ function buildBase(scene, signs, labels, plot, index, out) {
   g.position.set(plot.x, 0, B.frontZ)
   const frame = { x: plot.x, z: B.frontZ, yaw: 0 }
   const rand = mulberry32(1000 + index * 97)
+  const info = { x: plot.x, slots: [], card: new OwnerCard() }
+  out.plots[index] = info
 
   if (!plot.level) {
     // Empty plot: pale blue checker slab just above the grass, bevelled white rim.
@@ -101,11 +108,13 @@ function buildBase(scene, signs, labels, plot, index, out) {
       for (let i = 0; i < B.slotsPerSide; i++) {
         const sx = side * SLOT_X
         const sz = slotZ(i)
-        const live = plot.mine && k === 0 // your ground floor: slots driven by base/mybase.js
+        const live = k === 0 // ground floor slots are live for every plot: yours by base/mybase.js, the others' by the roster
         buildSlot(g, signs, { lav, lavLight, trim, orange, green }, sx, y, sz, side, k, i, rand, live)
         solidLocal(frame, 3.2, 0.42, 3.2, sx, y, sz)
         if (live) {
-          out.mySlots.push({ i: out.mySlots.length, x: plot.x + sx, y, z: B.frontZ + sz, side, padX: plot.x + side * PAD_X, signX: plot.x + side * SIGN_X, faceYaw: side < 0 ? Math.PI / 2 : -Math.PI / 2 })
+          const slot = { i: info.slots.length, x: plot.x + sx, y, z: B.frontZ + sz, side, padX: plot.x + side * PAD_X, signX: plot.x + side * SIGN_X, faceYaw: side < 0 ? Math.PI / 2 : -Math.PI / 2 }
+          info.slots.push(slot)
+          if (plot.mine) out.mySlots.push(slot)
           continue
         }
         const filled = !plot.mine && rand() < B.fill
@@ -154,7 +163,7 @@ function buildBase(scene, signs, labels, plot, index, out) {
     for (const px of [-1, 1]) box(g, pink, 0.8, 0.5, D, px * (HW + 0.25), y - 0.5, D / 2)
   }
 
-  buildEntrance(scene, g, signs, labels, plot, frame, out)
+  buildEntrance(scene, g, signs, labels, plot, frame, out, info.card)
   if (plot.mine) {
     // World matrices of the two board panels (taken before baking flattens the groups).
     g.updateMatrixWorld(true)
@@ -265,38 +274,16 @@ function buildFlight(g, frame, { pink, white }, k) {
 
 // Entrance dressing: owner head-shot + label on every base; your base also gets
 // the Base Upgrade sign, the control board and the floating house icon.
-function buildEntrance(scene, g, signs, labels, plot, frame, out) {
-  // Floating head-shot of the owner (blocky head with shades and hair).
+function buildEntrance(scene, g, signs, labels, plot, frame, out, card) {
+  // The owner card (Boxity DP, @name, Cash Multi) floats beside the entrance; it is a live sprite.
   const hx = 4.2
   const hy = 3.2
   const hz = -2.2
-  const head = new Group()
-  head.position.set(hx, hy, hz)
-  head.rotation.y = Math.PI // face the hub (-z)
-  g.add(head)
-  box(head, M('#ffd23a', { rough: 0.5 }), 1.4, 1.4, 1.4, 0, 0, 0)
-  box(head, M('#2b2b30', { rough: 0.3 }), 1.2, 0.28, 0.1, 0, 0.82, 0.72)
-  box(head, M('#7a3cff', { rough: 0.15, metal: 0.3 }), 0.5, 0.22, 0.06, -0.3, 0.82, 0.79)
-  box(head, M('#7a3cff', { rough: 0.15, metal: 0.3 }), 0.5, 0.22, 0.06, 0.3, 0.82, 0.79)
-  box(head, M('#d0461b', { rough: 0.6 }), 1.55, 0.5, 1.5, 0, 1.25, -0.05)
-  box(head, M('#d0461b', { rough: 0.6 }), 0.5, 0.9, 1.4, 0.6, 0.9, -0.1, 0, 0, deg(-20))
-  box(head, M('#1d2a44', { rough: 0.6 }), 1.8, 0.7, 1.1, 0, -0.75, -0.05)
-  box(head, M('#9a4a3a'), 0.4, 0.07, 0.05, 0, 0.35, 0.72)
-  if (!plot.mine) {
-    labels.add(
-      [
-        { t: `@${plot.owner}`, px: 40, color: '#ffffff' },
-        { t: `Cash Multi: x${plot.multi}`, px: 40, color: '#ffe14a' },
-      ],
-      plot.x + hx,
-      hy - 2.3,
-      B.frontZ + hz,
-      0.95,
-    )
-    return
-  }
-  // Your base: the owner label (live Cash Multi) and both board faces are drawn by base/board.js.
-  const boards = { label: { x: plot.x + hx, y: hy - 2.3, z: B.frontZ + hz } }
+  card.sprite.position.set(plot.x + hx, 1.2, B.frontZ + hz)
+  scene.add(card.sprite)
+  if (!plot.mine) return // the other plots carry only their owner card
+  // Your base: both board faces are drawn by base/board.js (the owner card is shared by every plot).
+  const boards = {}
   out.boards = boards
 
   const pink = S(C.pillar, { rough: 0.5 })

@@ -69,6 +69,11 @@ let nextStep = 0 // audio time of the next 16th
 let step = 0
 let bar = 0
 let voices = 0
+let musicScale = 1 // the portal's music_volume (0..1)
+export function setMusicVolume(v) {
+  musicScale = Math.max(0, Math.min(1, Number(v) || 0))
+  if (out && !switching) out.gain.setTargetAtTime(M.level * (M.moodLevel[mood] ?? 1) * musicScale, A.ctx.currentTime, 0.2)
+}
 let lastMel = 3
 
 onStart((ctx) => {
@@ -81,7 +86,7 @@ onStart((ctx) => {
   out.connect(lp).connect(A.amb)
   mood = want
   nextStep = ctx.currentTime + 0.3
-  out.gain.setTargetAtTime(M.level, ctx.currentTime, 1.5) // fade in
+  out.gain.setTargetAtTime(M.level * musicScale, ctx.currentTime, 1.5) // fade in
 })
 
 // One note voice: oscillator(s) -> lowpass -> envelope -> music bus. Returns false when skipped.
@@ -194,7 +199,7 @@ export function updateMusic(nextMood) {
       step = 0
       bar = 0
       nextStep = Math.max(nextStep, A.ctx.currentTime + 0.05)
-      out.gain.setTargetAtTime(M.level * (M.moodLevel[mood] ?? 1), A.ctx.currentTime, 0.6)
+      out.gain.setTargetAtTime(M.level * (M.moodLevel[mood] ?? 1) * musicScale, A.ctx.currentTime, 0.6)
       switching = false
     }, 1100)
   }

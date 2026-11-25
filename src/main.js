@@ -1,3 +1,4 @@
+import * as THREE from 'three'
 import { ACESFilmicToneMapping, Clock, Group, PCFSoftShadowMap, PerspectiveCamera, Scene, SRGBColorSpace, Vector3, WebGLRenderer } from 'three'
 import { BASE, CAMERA, graphicsPreset, RENDER, SAFE_ZONE } from './config.js'
 import * as bloxity from './bloxity.js'
@@ -11,7 +12,10 @@ import { createLighting } from './lighting.js'
 import { createWorld } from './world.js'
 import { buildSafeZone } from './safezone/index.js'
 import { setParticleDensity, updateParticles } from './particles.js'
-import { installAudio, updateAudio, updateMusic } from './audio/index.js'
+import { installAudio, setAdMuted, setMusicVolume, setVolume, updateAudio, updateMusic } from './audio/index.js'
+import { emoteClip } from './avatar/emotes.js'
+import { setShowFps, tickFps } from './fps.js'
+import { toast } from './toast.js'
 import { createPostFx } from './postfx.js'
 import { setNeonBloom } from './propkit.js'
 import { buildDefaultCharacter, loadBaseCharacter } from './avatar/character.js'
@@ -23,12 +27,15 @@ import { createLane } from './lane/index.js'
 import { createMyBase } from './base/mybase.js'
 import { createBaseBoard } from './base/board.js'
 import { initUi } from './ui/index.js'
-import { load as loadProgress, state, tickSave, changed, addFighter } from './state.js'
+import { load as loadProgress, state, tickSave, changed, addFighter, baseMulti } from './state.js'
 import { makeFighter, rosterFor } from './roster.js'
 // --- Treadmill / Backpack / Net (imports) ---
 import { createTreadmill } from './treadmill.js'
 import { createBackpack } from './backpack.js'
-import { initNet } from './net.js'
+import { hint, initNet, net, sendOutfit, sendPose, whenBase } from './net.js'
+import { createRemotePlayers } from './remote.js'
+import { createRemoteBases } from './safezone/remotebases.js'
+import { BASE_DEFAULT } from './safezone/bases.js'
 
 // Boot order: Bloxity SDK -> renderer -> Rapier (async wasm) -> ground + sky + lighting,
 // player body -> avatar (async, swaps in when ready) -> loop. The SDK is optional at every step.
@@ -39,6 +46,9 @@ let postfx = null
 // Settings come from the portal's settings menu (or their defaults offline).
 function applySetting(key, value) {
   if (key === 'camera_sensitivity') setCameraSensitivity(value)
+  else if (key === 'master_volume') setVolume(value / 100)
+  else if (key === 'music_volume') setMusicVolume(value / 100)
+  else if (key === 'show_fps') setShowFps(value)
   else if (key === 'fullscreen') bloxity.requestFullscreen(value)
   else if (key === 'graphics_quality' && renderer) {
     const next = graphicsPreset(value)
@@ -53,6 +63,7 @@ function applySetting(key, value) {
 }
 bloxity.onSetting(applySetting)
 bloxity.init()
+initNet() // join early: the server assigns this player's base, which the safe zone is built around
 
 // --- Renderer ---------------------------------------------------------------
 const preset = graphicsPreset(bloxity.settings.graphics_quality)
@@ -88,8 +99,31 @@ await initPhysics()
 
 lighting = createLighting(scene, renderer, preset)
 const world = createWorld(scene) // clouds
+// Which base is mine: the server's answer (the join also asks for the one remembered from this tab),
+// else the default plot when there is no server.
+bloxity.loadingStep('Joining the room')
+const builtBase = (await whenBase(6000)) ?? (hint.base >= 0 ? hint.base : BASE_DEFAULT)
+hint.base = builtBase
+try {
+  sessionStorage.setItem('dbz.base', String(builtBase))
+} catch {
+  // Storage blocked.
+}
 bloxity.loadingStep('Building the safe zone')
-const safeZone = await buildSafeZone(scene)
+const safeZone = await buildSafeZone(scene, { base: builtBase })
+const remoteBases = createRemoteBases(scene, safeZone.plots, builtBase, () => ({ name: bloxity.displayName(), pfp: bloxity.getPfp(), multi: baseMulti() }))
+// A late join can be given another plot than the one built (it was taken meanwhile): rebuild once around it.
+setInterval(() => {
+  if (net.base < 0 || net.base === builtBase) return
+  try {
+    if (Date.now() - Number(sessionStorage.getItem('dbz.reloadAt') || 0) < 30000) return
+    sessionStorage.setItem('dbz.reloadAt', String(Date.now()))
+    sessionStorage.setItem('dbz.base', String(net.base))
+  } catch {
+    return
+  }
+  location.reload()
+}, 1000)
 installFx(scene)
 createPlayerBody()
 installAudio()
@@ -106,15 +140,21 @@ let animator = null
 let generation = 0
 let avatarReady = false
 
-function setAvatar(next) {
+// `kit` = the platform character kit's handle while the avatar is dressed by it (see loadAvatar).
+let kit = null
+function setAvatar(next, nextKit = null) {
   if (avatar) playerGroup.remove(avatar)
   disposeAnimator(animator)
+  kit?.dispose()
+  kit = nextKit
   avatar = next
   playerGroup.add(avatar)
   animator = makeAnimator(avatar)
 }
 
 setAvatar(buildDefaultCharacter()) // visible immediately; replaced once the rig loads
+
+const remotePlayers = createRemotePlayers(scene, camera)
 
 // --- Lane, your base, HUD -------------------------------------------------------
 // Shop / Base / Sell teleport you to those spots in the safe zone (facing in).
@@ -140,7 +180,6 @@ const baseBoard = createBaseBoard(scene, safeZone.myBoards, { camera, canvas: re
 // game server only (state.tickSave sends it).
 const treadmill = createTreadmill(scene, { hud, camera, renderer })
 createBackpack({ hud, renderer })
-initNet()
 // Windows (src/ui/): Index, Rebirth, Quests, Playtime + Daily Rewards, Settings, x2 Speed.
 const ui = initUi({ hud, renderer, camera, applySetting, portalQuality: () => bloxity.settings.graphics_quality, safeZone })
 // Respawning (R, touch, portal) while out on the lane loses the orb run / the fighter.
@@ -155,11 +194,19 @@ async function loadAvatar() {
   try {
     const group = await loadBaseCharacter()
     if (mine !== generation) return
-    const equipped = bloxity.authState.user ? bloxity.getEquippedAvatar() : null
-    await attachEquippedAccessories(group, equipped, { skinTextureUrl: bloxity.getSkinTextureUrl() })
-    if (mine !== generation) return
-    applyProportions(group, bloxity.authState.user ? bloxity.getProportions() : null)
-    setAvatar(group)
+    // The platform character kit dresses the rig from the outfit key (every slot, the skin with
+    // pants / shirt / face, body parts, accessories and proportions, item types added later too).
+    // When it can't (kit off, custom character, SDK blocked) the manual path below takes over.
+    const handle = await bloxity.dressCharacter(group, bloxity.getOutfitKey())
+    if (mine !== generation) return void handle?.dispose()
+    if (!handle) {
+      const equipped = bloxity.authState.user ? bloxity.getEquippedAvatar() : null
+      await attachEquippedAccessories(group, equipped, { skinTextureUrl: bloxity.getSkinTextureUrl() })
+      if (mine !== generation) return
+      applyProportions(group, bloxity.authState.user ? bloxity.getProportions() : null)
+    }
+    setAvatar(group, handle)
+    sendOutfit() // the others dress their copy of you from the same key
   } finally {
     if (mine === generation) avatarReady = true
   }
@@ -174,8 +221,29 @@ bloxity.subscribeAuth((s) => {
   }
 })
 bloxity.onAvatarChanged(loadAvatar)
-bloxity.onProportionsChanged(() => applyProportions(avatar, bloxity.getProportions()))
+// The kit bakes proportions into the outfit key, so a slider change is a look change.
+bloxity.onProportionsChanged(() => (kit ? loadAvatar() : applyProportions(avatar, bloxity.getProportions())))
 bloxity.onRespawnRequest(respawnAll)
+
+// --- Boxity platform events ---------------------------------------------------------------
+// Emotes (the portal's picker sends the id; the clip comes from its catalogue), the portal handing
+// the mouse back, overhead chat bubbles, ad breaks and earned badges.
+bloxity.onPlayerEvent((event, data) => {
+  if (event === 'play_emote') emoteClip(String(data)).then((clip) => clip && animator?.playEmote(clip))
+  else if (event === 'stop_emote') animator?.stopEmote()
+  else if (event === 'pointer_lock_changed' && !data && document.pointerLockElement) document.exitPointerLock?.()
+})
+bloxity.onChat((message, text) => {
+  if (!text) return
+  const target = message?.isLocalPlayer ? playerGroup : remotePlayers.byUid(message?.userId)
+  if (target) bloxity.chatBubble(THREE, target, text, 2.3)
+})
+let adBreak = false
+bloxity.onAdBreak((active) => {
+  adBreak = active
+  setAdMuted(active)
+})
+bloxity.onBadgeEarned((badge) => toast(`Badge: ${badge?.name ?? 'earned'}`, badge?.description ?? '', '#ffd23a'))
 
 // --- Modes + keys --------------------------------------------------------------
 onModeChanged((mode) => {
@@ -199,6 +267,8 @@ let readySince = 0
 
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1) // clamp huge frames (tab switch, breakpoint)
+  if (adBreak) return // an ad plays over the game: it is paused until the break ends
+  tickFps(dt)
   const elapsed = clock.elapsedTime
 
   stepPhysics(dt) // runs the player controller + world at the fixed rate, interpolates bodies
@@ -217,6 +287,9 @@ function frame() {
   })
 
   lane.update(dt, elapsed, p, isFirstPerson())
+  remotePlayers.update(dt)
+  remoteBases.update(dt)
+  sendPose(p.x, p.y, p.z, player.facing, Math.hypot(player.velocity.x, player.velocity.z), { form: lane.presenceForm, ball: state.ball, fighter: lane.fighterLook, held: lane.heldLook, multi: baseMulti(), slots: state.slots.map((sl) => sl.fighter?.look ?? null) }, performance.now())
   myBase.update(dt, elapsed, p, lane.form)
   baseBoard.update(dt, p, lane.form)
   treadmill.update(dt, elapsed) // --- Treadmill ---
@@ -320,5 +393,5 @@ if (import.meta.env.DEV) {
     addFighter(makeFighter(list[Math.floor(Math.random() * list.length)], state.nextId++))
   }
   // frame: one loop iteration (drive it with setInterval when the tab is hidden and rAF stalls)
-  window.__game = { player, scene, renderer, camera, postfx, bodies: bodyCount, toggleMode, teleport, safeZone, lane, state, setSpeed, giveMoney, giveFighter, hud, frame }
+  window.__game = { remotePlayers, player, scene, renderer, camera, postfx, bodies: bodyCount, toggleMode, teleport, safeZone, lane, state, setSpeed, giveMoney, giveFighter, hud, frame }
 }

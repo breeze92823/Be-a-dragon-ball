@@ -2,6 +2,8 @@
 // here may throw when the SDK is missing: a blocked sdk.bloxity.io leaves the
 // game fully playable on the default avatar and keyboard controls.
 // Docs: https://docs.bloxity.io/#html5
+import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { GAME_SLUG, GAME_TITLE, SETTINGS, DEV_MODE, coerceSetting } from './config.js'
 
 export function sdk() {
@@ -25,6 +27,10 @@ const authListeners = new Set()
 const settingListeners = new Set()
 const respawnListeners = new Set()
 const unsubscribers = []
+const playerEventListeners = new Set()
+const adBreakListeners = new Set()
+const chatListeners = new Set()
+const badgeListeners = new Set()
 
 function emit(listeners, ...args) {
   for (const fn of listeners) {
@@ -112,17 +118,27 @@ export function getPfp() {
   const raw = authState.user?.pfp || authState.guest?.pfp
   if (typeof raw !== 'string' || !raw) return ''
   try {
-    let base = 'https://static.bloxity.io'
-    try {
-      base = sdk()?.environment?.()?.staticUrl || base
-    } catch {
-      // Older SDK builds have no environment().
-    }
+    const base = boxityEnv().staticUrl
     const url = new URL(raw, base)
     return /^https?:$/.test(url.protocol) ? url.href : ''
   } catch {
     return ''
   }
+}
+
+// --- Environment ---------------------------------------------------------
+// Boxity tells the page which environment it runs in (prod / stage / local); never guess it from a
+// hostname or hardcode api./static.bloxity.io. Prod is only the fallback when nothing was told.
+const PROD_ENV = { env: 'prod', apiUrl: 'https://api.bloxity.io', playUrl: 'https://play.bloxity.io', portalUrl: 'https://bloxity.io', staticUrl: 'https://static.bloxity.io' }
+export function boxityEnv() {
+  try {
+    const e = sdk()?.environment?.()
+    if (e?.apiUrl) return e
+  } catch {
+    // Older SDK builds have no environment().
+  }
+  const told = typeof window !== 'undefined' ? window.BLOXITY_ENV : null
+  return told && told.apiUrl ? told : PROD_ENV
 }
 
 // --- Init ---------------------------------------------------------------
@@ -178,10 +194,12 @@ export function init() {
     }
 
     unsubscribers.push(
-      SDK.player.onEvent((event) => {
+      SDK.player.onEvent((event, data) => {
         if (event === 'respawn_request') emit(respawnListeners)
+        else emit(playerEventListeners, event, data) // chat_message_sent, pointer_lock_changed, play_emote, stop_emote
       }),
     )
+    installPlatformFeatures(SDK)
 
     SDK.game.loadingStep('Building the island')
   } catch (err) {
@@ -210,6 +228,7 @@ export function notifyFirstFrame() {
   try {
     SDK.game.loadingEnd()
     SDK.game.gameplayStart()
+    reportScreen('gameplay')
   } catch {
     // Non-fatal.
   }
@@ -379,5 +398,190 @@ export function requestFullscreen(on) {
     else SDK.portal.exitFullscreen()
   } catch {
     // Ignore.
+  }
+}
+
+// --- Platform features (docs.bloxity.io) ---------------------------------------------------------
+// Emotes, ad breaks, screen ads, leaderboards, badges and overhead chat. Boxity draws the UI for all
+// of them; the game only opts in, pauses for ads, reports its screens and reacts to events.
+export const BOARDS = [
+  { id: 'cash', label: 'Top Cash', format: 'compact' },
+  { id: 'speed', label: 'Top Speed', format: 'compact' },
+  { id: 'rebirths', label: 'Top Rebirths', format: 'number' },
+  { id: 'playtime', label: 'Top Playtime', format: 'time' },
+]
+
+function installPlatformFeatures(SDK) {
+  const guard = (fn) => {
+    try {
+      fn()
+    } catch (err) {
+      console.warn('[bloxity] feature setup failed', err)
+    }
+  }
+  const keep = (off) => {
+    if (typeof off === 'function') unsubscribers.push(off)
+  }
+  // Emotes: Boxity owns the picker; this only makes the button appear (right after init).
+  guard(() => SDK.game.registerFeature?.('emotes'))
+  // Ads: Boxity runs every ad. Pause + mute for every break, midrolls included.
+  guard(() => {
+    const a = SDK.ads
+    if (!a) return
+    keep(a.onBreakStart?.((info) => emit(adBreakListeners, true, info?.kind)))
+    keep(a.onBreakEnd?.((info) => emit(adBreakListeners, false, info?.kind)))
+    // The game's own screens: one full-screen window at a time ('panel') and the world ('gameplay').
+    a.declareScreens?.({ panel: {}, gameplay: {} })
+  })
+  // Leaderboards: the server reports the scores (backend boxity.ts); declaring shows the trophy button.
+  guard(() => SDK.leaderboard?.define?.(BOARDS.map((b) => ({ ...b, mode: 'best', reset: 'none' }))))
+  guard(() => keep(SDK.badges?.onEarned?.((badge) => emit(badgeListeners, badge))))
+  guard(() => keep(SDK.chat?.onMessage?.((m) => emit(chatListeners, m, SDK.chat.bubbleText?.(m) ?? m?.text ?? ''))))
+}
+
+// fn(event, data) for the portal events the game handles itself: 'chat_message_sent',
+// 'pointer_lock_changed', 'play_emote' (data = emote id) and 'stop_emote'.
+export function onPlayerEvent(fn) {
+  playerEventListeners.add(fn)
+  return () => playerEventListeners.delete(fn)
+}
+// fn(active, kind): an ad break starts (true) / ends (false); pause the game and mute while active.
+export function onAdBreak(fn) {
+  adBreakListeners.add(fn)
+  return () => adBreakListeners.delete(fn)
+}
+export function onBadgeEarned(fn) {
+  badgeListeners.add(fn)
+  return () => badgeListeners.delete(fn)
+}
+// fn(message, bubbleText): every chat message in the room (including the player's own).
+export function onChat(fn) {
+  chatListeners.add(fn)
+  return () => chatListeners.delete(fn)
+}
+// A camera-facing bubble over a three.js object for the SDK's bubbleSeconds.
+export function chatBubble(THREE, target, text, height) {
+  try {
+    sdk()?.chat?.attachBubble?.(THREE, target, text, { height })
+  } catch {
+    // Cosmetic.
+  }
+}
+
+// Screen ads: report which of the game's screens is showing ('gameplay' or 'panel'); Boxity draws
+// its banners around it. No-ops outside Boxity.
+let shownScreen = ''
+export function reportScreen(name) {
+  if (name === shownScreen) return
+  shownScreen = name
+  try {
+    sdk()?.ads?.screen?.(name)
+  } catch {
+    // Non-fatal.
+  }
+}
+
+// Rewarded ads. -> { status: 'completed' | 'skipped' | 'no-fill' | ..., rewardToken? }.
+export const adsAvailable = () => {
+  try {
+    return !!sdk()?.ads?.isAvailable?.()
+  } catch {
+    return false
+  }
+}
+export async function showRewardedAd(placement) {
+  try {
+    return (await sdk()?.ads?.showRewarded?.(placement)) ?? { status: 'disabled' }
+  } catch {
+    return { status: 'error' }
+  }
+}
+
+// The player's Boxity token: the game server verifies it with the platform to learn who this is.
+export function getToken() {
+  try {
+    return sdk()?.auth?.getToken?.() || ''
+  } catch {
+    return ''
+  }
+}
+
+// Friend-join toasts: report the room's players (players already there / players arriving).
+export function playerInRoom(name) {
+  try {
+    sdk()?.game?.playerInRoom?.(name)
+  } catch {
+    // Cosmetic.
+  }
+}
+export function playerJoined(name) {
+  try {
+    sdk()?.game?.playerJoined?.(name)
+  } catch {
+    // Cosmetic.
+  }
+}
+
+// --- Platform character kit ------------------------------------------------------------------------
+// Boxity builds one outfit file per look (body, skin with pants / shirt / face, body parts, every
+// accessory) and binds it to our player.glb rig by bone name; we keep the skeleton, animations and
+// held items. Everyone's look travels as one URL-safe outfit key, so item types Boxity adds later
+// show up here with no code change. dress() resolves null when the kit is off for this game, the key
+// is invalid, a custom character is worn or the file failed: callers then keep the manual avatar.
+const KEY = /^[A-Za-z0-9_.-]{1,2900}$/
+export const validOutfitKey = (key) => typeof key === 'string' && KEY.test(key)
+
+// The local player's outfit key ('' without the SDK): every slot + body proportions.
+export function getOutfitKey() {
+  try {
+    const key = sdk()?.avatar?.getOutfitKey?.()
+    return validOutfitKey(key) ? key : ''
+  } catch {
+    return ''
+  }
+}
+
+export function kitEnabled() {
+  try {
+    return !!sdk()?.character?.isEnabled?.()
+  } catch {
+    return false
+  }
+}
+
+// -> CharacterHandle { update(key), dispose(), say(text), head, outfitKey } or null.
+// `proportions: 'kit'` (default): the kit applies the look's body proportions, so the game must not.
+export async function dressCharacter(root, outfitKey) {
+  const SDK = sdk()
+  if (!SDK?.character?.dress || !validOutfitKey(outfitKey)) return null
+  try {
+    if (SDK.character.canDress && !SDK.character.canDress(outfitKey)) return null
+    return (await SDK.character.dress({ THREE, GLTFLoader, root, outfitKey })) ?? null
+  } catch (err) {
+    console.warn('[bloxity] character kit failed; using the manual avatar', err)
+    return null
+  }
+}
+
+// --- Skins without the character kit -----------------------------------------------------------------
+// Where the kit is off, the others' skins are drawn the manual way from the equipped item ids, so they
+// travel too: `look` = JSON { equipped, proportions } (ids only, a few hundred bytes).
+export function getLookJson() {
+  try {
+    const equipped = getEquippedAvatar()
+    if (!equipped) return ''
+    const out = JSON.stringify({ equipped, proportions: getProportions() ?? null })
+    return out.length <= 2900 ? out : ''
+  } catch {
+    return ''
+  }
+}
+// The skin texture (with pants / shirt / face drawn on) of another player's equipped ids.
+export function skinTextureUrlFor(equipped) {
+  try {
+    const url = sdk()?.avatar?.getSkinTextureUrlFor?.(equipped)
+    return typeof url === 'string' && url ? url : null
+  } catch {
+    return null
   }
 }

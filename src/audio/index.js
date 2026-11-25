@@ -9,6 +9,8 @@ export { setLaneZone } from './zones.js' // each lane zone's sound bed
 import { updateMusic } from './music.js'
 
 export { sfx, setVolume, setMuted, isMuted, toggleMuted, updateMusic }
+export { setAdMuted } from './core.js'
+export { setMusicVolume } from './music.js'
 export const falloff = ambience.falloff
 
 export function installAudio() {
