@@ -5,8 +5,10 @@ import { AUDIO } from '../config.js'
 import { A, installAudio as installCore, isMuted, setMuted, setVolume, toggleMuted } from './core.js'
 import * as sfx from './sfx.js'
 import * as ambience from './ambience.js'
+export { setLaneZone } from './zones.js' // each lane zone's sound bed
+import { updateMusic } from './music.js'
 
-export { sfx, setVolume, setMuted, isMuted, toggleMuted }
+export { sfx, setVolume, setMuted, isMuted, toggleMuted, updateMusic }
 export const falloff = ambience.falloff
 
 export function installAudio() {

@@ -1,6 +1,8 @@
 import { Group } from 'three'
 import { M, S, box, bakeInto, solidLocal } from '../safezone/kit.js'
 import { strokeText, roundRect } from '../safezone/text.js'
+import { createEmitter } from '../particles.js'
+import { dressHouse } from './housedeco.js'
 
 // A guardian's base (screenshots 5-14): a raised studded platform, walls with
 // big white-framed windows on three sides, an open front toward the lane, a
@@ -107,6 +109,9 @@ export function buildHouse(scene, signs, zone, frame, carpetLen) {
   // Carpet out to the lane.
   if (carpetLen > 0) box(g, carpet, 3.2, 0.05, carpetLen, 0, 0, D / 2 + 1.4 + carpetLen / 2)
 
+  // The zone's theme: roof, props, torches, throne (housedeco.js).
+  const deco = dressHouse(g, zone, frame, { W, D, H, F }, carpetLen)
+
   bakeInto(scene, g, true)
 
   // --- Gameplay points (world space) ---
@@ -118,9 +123,19 @@ export function buildHouse(scene, signs, zone, frame, carpetLen) {
     const dz = wz - frame.z
     return { x: dx * c - dz * s, z: dx * s + dz * c }
   }
-  const seat = toWorld(0, SEAT_Z + 0.15)
+  const seat = toWorld(0, SEAT_Z + 0.15)
+  // Torch flames (one GPU emitter for all of them) and a slow drift of themed motes round the base.
+  const emitters = []
+  if (deco.torches.length) {
+    const boxes = deco.torches.map((t) => ({ ...toWorld(t.x, t.z), y: t.y, sx: 0.22, sy: 0.05, sz: 0.22 }))
+    emitters.push(createEmitter(scene, { boxes, count: boxes.length * 34, life: 0.75, velocity: [0, 2.3, 0], spread: [0.35, 0.6, 0.35], size: 0.55, grow: 0.15, color: deco.flame, intensity: 2.6, seed: 300 + Math.round(frame.z) }))
+    emitters.push(createEmitter(scene, { boxes: boxes.map((b) => ({ ...b, y: b.y + 0.6, sy: 0.3 })), count: boxes.length * 10, life: 1.4, velocity: [0, 2.8, 0], spread: [0.6, 0.8, 0.6], size: 0.12, sprite: 'sparkle', color: '#ffe8a0', intensity: 3, twinkle: 9, seed: 301 + Math.round(frame.z) }))
+  }
+  const c0 = toWorld(0, 0)
+  emitters.push(createEmitter(scene, { boxes: [{ x: c0.x, y: H * 0.6, z: c0.z, sx: W * 0.6, sy: H * 0.5, sz: W * 0.6 }], count: 60, life: 4, velocity: [0, 0.35, 0], spread: [0.3, 0.2, 0.3], size: 0.16, sprite: 'sparkle', color: deco.aura, intensity: 2, twinkle: 4, seed: 302 + Math.round(frame.z) }))
   return {
     frame,
+    emitters,
     y: F,
     frontYaw: frame.yaw,
     toWorld,

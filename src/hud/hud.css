@@ -654,3 +654,23 @@
     height: min(clamp(48px, 9vh, 86px), 8.6vw);
   }
 }
+
+/* A guardian closing in: the red vignette scales with --danger (0..1), also for the orb. */
+.hud.chased .hud-vignette {
+  opacity: calc(0.25 + var(--danger, 0) * 0.75);
+  animation: vig-d calc(0.9s - var(--danger, 0) * 0.45s) ease-in-out infinite alternate;
+}
+.hud.running.chased .hud-vignette {
+  animation-name: vig;
+}
+@keyframes vig-d {
+  from {
+    opacity: calc(var(--danger, 0) * 0.5);
+  }
+  to {
+    opacity: calc(0.2 + var(--danger, 0) * 0.8);
+  }
+}
+.hud.running.chased .hud-vignette {
+  background: radial-gradient(ellipse at center, rgba(255, 0, 0, 0) calc(45% - var(--danger, 0) * 15%), rgba(255, 20, 0, 0.7) 100%);
+}

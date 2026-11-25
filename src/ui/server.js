@@ -1,5 +1,6 @@
-import { DAILY, PLAYTIME, QUESTS } from '../config.js'
+import { DAILY, PLAYTIME, QUESTS, SPIN } from '../config.js'
 import { net } from '../net.js'
+import { outcomes, rollFusion } from './fuserules.js'
 
 // The windows' link to the game server's clock-based systems (backend playtime.ts, quests.ts,
 // daily.ts): the server decides what is unlocked and stores claims, the client only grants the
@@ -12,9 +13,11 @@ import { net } from '../net.js'
 //
 // view.playtime { secs (at `at`), claimed[] }, view.quests { day, list[{ kind, goal, n, rerolled }],
 // claimed }, view.daily { unlocked, claimed[] }; each also has nextAt (server ms of next UTC day).
+// The server-authoritative machines: view.fuse { fusing: { inputs, readyAt, outcomes } | null }
+// (backend fuse.ts) and view.spins { spins, nextAt } (backend spin.ts).
 
 const DAY_MS = 86_400_000
-export const view = { playtime: null, quests: null, daily: null, online: false }
+export const view = { playtime: null, quests: null, daily: null, fuse: null, spins: null, online: false }
 let offset = 0
 export const serverNow = () => Date.now() + offset
 const listeners = new Set()
@@ -39,6 +42,14 @@ function setDaily(v) {
   view.daily = { unlocked: v.unlocked, claimed: [...v.claimed], nextAt: v.nextAt }
   emit('daily')
 }
+function setFuse(v) {
+  view.fuse = { fusing: v?.fusing ? { inputs: v.fusing.inputs, readyAt: v.fusing.readyAt, outcomes: v.fusing.outcomes ?? outcomes(v.fusing.inputs) } : null }
+  emit('fuse')
+}
+function setSpins(v) {
+  view.spins = { spins: v.spins, nextAt: v.nextAt }
+  emit('spins')
+}
 
 // --- Offline rules (mirror the backend) ----------------------------------------------------
 const utcDay = (ms = Date.now()) => Math.floor(ms / DAY_MS)
@@ -56,7 +67,11 @@ function goOffline() {
   setPlaytime({ secs: 0, claimed: [], nextAt: (utcDay() + 1) * DAY_MS })
   setQuests(localQuests())
   setDaily({ unlocked: 1, claimed: [], nextAt: (utcDay() + 1) * DAY_MS })
+  // A page-only fusion keeps running offline; the free spin clock starts fresh.
+  if (!local.job) setFuse({ fusing: null })
+  setSpins({ spins: SPIN.start, nextAt: Date.now() + SPIN.everyMs })
 }
+const local = { job: null } // the offline fusion (with its result)
 
 // --- Room binding ----------------------------------------------------------------------------
 const waiting = {}
@@ -78,6 +93,18 @@ function bind(room) {
     waiting.questResult?.(r)
   }))
   room.onMessage('daily', mine((v) => (keep(v), setDaily(v))))
+  room.onMessage('fuse', mine((v) => (keep(v), setFuse(v))))
+  room.onMessage('fuseResult', mine((r) => {
+    keep(r)
+    if ('fusing' in (r ?? {})) setFuse(r)
+    waiting.fuseResult?.(r)
+  }))
+  room.onMessage('spins', mine((v) => (keep(v), setSpins(v))))
+  room.onMessage('spinResult', mine((r) => {
+    keep(r)
+    if (typeof r?.spins === 'number') setSpins(r)
+    waiting.spinResult?.(r)
+  }))
   room.onMessage('dailyResult', mine((r) => {
     keep(r)
     if (Array.isArray(r?.claimed)) setDaily(r)
@@ -104,7 +131,7 @@ export function pollServer(dt) {
     bound = room
     if (room) {
       // The server's views replace the page's offline ones (null = loading).
-      view.playtime = view.quests = view.daily = null
+      view.playtime = view.quests = view.daily = view.fuse = view.spins = null
       view.online = true
       bind(room)
       syncIn = 0.2
@@ -117,7 +144,7 @@ export function pollServer(dt) {
   }
   if (!bound && !view.playtime) goOffline()
   // Ask for the views until they are here (the load may have answered before bind).
-  if (bound && net.loaded && (!view.quests || !view.daily || !view.playtime)) {
+  if (bound && net.loaded && (!view.quests || !view.daily || !view.playtime || !view.fuse || !view.spins)) {
     syncIn -= dt
     if (syncIn <= 0) {
       syncIn = 3
@@ -140,6 +167,8 @@ export function pollServer(dt) {
       }
     }
   }
+  // Offline: free spins accrue on the page clock.
+  if (!bound && view.spins) accrueLocal(view.spins)
   // Offline: the page counts the Play quests itself.
   if (!bound) {
     playTick += dt
@@ -225,4 +254,67 @@ export async function claimQuests(skip) {
 export function questEvent(kind, n = 1) {
   if (bound) return void send('questEvent', { kind, n })
   if (localProgress(kind, n)) emit('quests')
+}
+
+// --- Fuse Machine (backend fuse.ts) -------------------------------------------------------------
+// fuseStart(inputs) -> { ok, reason?, fusing }; fuseClaim() -> { ok, reason?, result: { rarity,
+// mutation (id | null), pick } }. The client removes the fighters / grants the result on ok.
+export async function fuseStart(inputs) {
+  if (bound) return request('fuseStart', { inputs }, 'fuseResult')
+  if (local.job) return { ok: false, reason: 'busy' }
+  local.job = rollFusion(inputs, Date.now())
+  setFuse({ fusing: local.job })
+  return { ok: true, fusing: view.fuse.fusing }
+}
+
+export async function fuseClaim() {
+  if (bound) return request('fuseClaim', {}, 'fuseResult')
+  const job = local.job
+  if (!job) return { ok: false, reason: 'none' }
+  if (Date.now() < job.readyAt) return { ok: false, reason: 'wait' }
+  local.job = null
+  setFuse({ fusing: null })
+  return { ok: true, result: { rarity: job.rarity, mutation: job.mutation, pick: job.pick } }
+}
+
+// --- Dragon Spin (backend spin.ts) ---------------------------------------------------------------
+function accrueLocal(s) {
+  const now = Date.now()
+  let moved = false
+  while (s.spins < SPIN.cap && now >= s.nextAt) {
+    s.spins++
+    s.nextAt += SPIN.everyMs
+    moved = true
+  }
+  if (s.spins >= SPIN.cap && s.nextAt < now) s.nextAt = now + SPIN.everyMs
+  if (moved) emit('spins')
+}
+
+// -> { ok, id (SPIN.wedges id), spins, nextAt } or { ok: false, reason: 'none' | ... }.
+export async function spinWheel() {
+  if (bound) return request('spin', {}, 'spinResult')
+  const s = view.spins
+  if (!s || s.spins < 1) return { ok: false, reason: 'none' }
+  if (s.spins >= SPIN.cap) s.nextAt = Date.now() + SPIN.everyMs
+  s.spins--
+  const total = SPIN.wedges.reduce((n, w) => n + w.weight, 0)
+  let r = Math.random() * total
+  let id = SPIN.wedges[SPIN.wedges.length - 1].id
+  for (const w of SPIN.wedges) {
+    if (r < w.weight) {
+      id = w.id
+      break
+    }
+    r -= w.weight
+  }
+  emit('spins')
+  return { ok: true, id, spins: s.spins, nextAt: s.nextAt }
+}
+
+// A spin pack the player paid $ for (SPIN.packs index).
+export function buySpins(pack) {
+  if (bound) return void send('buySpins', { pack })
+  if (!view.spins) return
+  view.spins.spins += SPIN.packs[pack]?.spins ?? 0
+  emit('spins')
 }

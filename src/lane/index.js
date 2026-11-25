@@ -2,7 +2,8 @@ import { Vector3 } from 'three'
 import { LANE, MUTATIONS, RARITIES, SAFE_ZONE, SPAWN, SPAWN_FACING, ZONES } from '../config.js'
 import { player, placePlayer, resetPlayer, setFrozen, setMoveProfile } from '../player.js'
 import { syncYawToPlayer } from '../camera.js'
-import { sfx, spatial } from '../audio/index.js'
+import { segmentClear } from '../physics.js'
+import { sfx, spatial, setLaneZone } from '../audio/index.js'
 import { confettiBurst, flash, glow, puff, smoke } from '../fx.js'
 import { DynLabel, short, paintLines } from '../safezone/text.js'
 import { makeFighter, rollMutation, rosterFor } from '../roster.js'
@@ -47,6 +48,15 @@ export function createLane(scene, { hud, playerGroup, getAvatar }) {
   const flyFrom = new Vector3()
   const hold = new Vector3()
   let hatchT = 0
+  let wrongT = 0 // s spent running away from the safe zone while hunted
+  let warned = false
+  let eatenT = 0
+  // Camera effects (main.js applies them): FOV kick, proximity danger, look-assist toward the guardian.
+  const camFx = { fov: 0, lookW: 0, look: new Vector3() }
+  let punch = 0
+  let danger = 0
+  let waitT = 0 // s the orb has sat on the slot waiting for the guardian to fall asleep
+  let hatchIn = -1 // s until the transform starts once the guardian is asleep
   let revealed = false
   let hatchSlot = null
   let pending = null // the fighter being hatched / run home
@@ -58,7 +68,7 @@ export function createLane(scene, { hud, playerGroup, getAvatar }) {
   let shake = 0
   let rollAcc = 0
   let lastBeat = 0
-  const target = { x: 0, z: 0 } // live chase target (orb / fighter feet)
+  const target = { x: 0, y: 0, z: 0 } // live chase target (orb / fighter feet)
   const centre = new Vector3()
   const cam = { x: 0, y: 0, z: 0, lx: 0, ly: 0, lz: 0 }
 
@@ -147,13 +157,20 @@ export function createLane(scene, { hud, playerGroup, getAvatar }) {
     g.carryTo(hatchSlot)
     sfx.grab()
     shake = Math.max(shake, 0.5)
+    punch = -10 // snap zoom-in as the hands close
     hud.flashScreen?.('#ffffff')
   }
 
+  // The orb is on the slot. The guardian dusts its hands off, walks back to its bench and
+  // dozes off; only once it is asleep does the orb start to hatch (hatchT < 0 = waiting).
   function startHatch() {
     form = 'hatching'
-    hatchT = 0
+    hatchT = -1e9
+    waitT = 0
     pending = rollFighter(active.zone, luckAtCatch)
+  }
+  function beginTransform() {
+    hatchT = 0
     sfx.hatchSwirl()
   }
 
@@ -171,7 +188,28 @@ export function createLane(scene, { hud, playerGroup, getAvatar }) {
     hud.hatched(what)
     hud.run(true)
     sfx.alarm()
-    active.hunt(target)
+    hud.toast?.(`${active.name} is asleep...`, 'Sneak out before it wakes up!', '#ffe14a')
+    active.huntAfter(target) // sleeps on for LANE.guardian.wakeDelay s, then wakes and hunts
+  }
+
+  // Wrong way for too long: the guardian's tongue gets the fighter.
+  function tongued() {
+    form = 'tongued'
+    wrongT = 0
+    warned = false
+    active.tongueAttack(target)
+    hud.toast?.(`${active.name} is hungry!`, '', '#ff5a8a')
+  }
+  function eaten() {
+    const g = active
+    hud.toast?.(`${g?.name ?? 'The guardian'} ate ${pending?.name ?? 'your fighter'}!`, 'Always run toward the Safe Zone', '#ff6a5a')
+    sfx.lost()
+    disposeActor()
+    pending = null
+    active = null
+    toHuman(false)
+    resetPlayer(SPAWN, SPAWN_FACING)
+    syncYawToPlayer()
   }
 
   function lose() {
@@ -190,6 +228,8 @@ export function createLane(scene, { hud, playerGroup, getAvatar }) {
   }
 
   function safeHome() {
+    wrongT = 0
+    warned = false
     const p = player.renderPosition
     confettiBurst(p.x, p.y + 1.5, p.z, 180, 10)
     flash(p.x, p.y + 1.4, p.z, '#ffe36a', 70, 8)
@@ -233,8 +273,57 @@ export function createLane(scene, { hud, playerGroup, getAvatar }) {
     get shake() {
       return shake
     },
+    get camFx() {
+      return camFx
+    },
+    get danger() {
+      return danger
+    },
+    // Dev: skip straight to "just hatched in zone i's base" (hunted fighter).
+    devHatch(i = 0) {
+      active = guardians[i]
+      active.reset()
+      luckAtCatch = 1
+      hatchSlot = active.house.slots[2]
+      pending = rollFighter(active.zone, 1)
+      disposeActor()
+      actor = new FighterActor(pending.look, LANE.character.scale)
+      scene.add(actor.root)
+      orb.show(false)
+      showAvatar(false)
+      finishHatch()
+    },
+    get guardianState() {
+      return active ? `${active.state} ${active.t.toFixed(1)}` : 'none'
+    },
     // Cinematic camera while carried + hatching: outside the base's open front, looking in at the orb.
     get cinematic() {
+      if ((form === 'tongued' && active?.tongueHit) || (form === 'eaten' && active)) {
+        // Off the guardian's face along its line of sight (the open path the fighter ran),
+        // a little to the side and above, pulled in front of anything solid in between.
+        const fx = Math.sin(active.yaw)
+        const fz = Math.cos(active.yaw)
+        cam.lx = active.pos.x
+        cam.ly = active.pos.y + 3.8
+        cam.lz = active.pos.z
+        // Pushes slowly in on its face while it eats (and drops to eye level for the glare).
+        const push = form === 'eaten' ? Math.min(1, eatenT / 2.2) : 0
+        const dist = 9 - push * 4
+        let x = active.pos.x + fx * dist + fz * (2.5 - push * 1.5)
+        let y = active.pos.y + 7.5 - push * 2.6 // high enough to look over cacti and rocks
+        let z = active.pos.z + fz * dist - fx * (2.5 - push * 1.5)
+        const hit = segmentClear(cam.lx, cam.ly, cam.lz, x, y, z)
+        if (hit < 1) {
+          const k = Math.max(0.3, hit - 0.05)
+          x = cam.lx + (x - cam.lx) * k
+          y = cam.ly + (y - cam.ly) * k
+          z = cam.lz + (z - cam.lz) * k
+        }
+        cam.x = x
+        cam.y = y
+        cam.z = z
+        return cam
+      }
       if ((form !== 'caught' && form !== 'hatching') || !active) return null
       const yaw = active.house.frontYaw
       const fx = Math.sin(yaw)
@@ -256,7 +345,7 @@ export function createLane(scene, { hud, playerGroup, getAvatar }) {
     mps,
     // R / portal respawn while out on the lane: whatever you were carrying is lost.
     onRespawn() {
-      if (form === 'fighter' || form === 'caught' || form === 'hatching') {
+      if (form === 'fighter' || form === 'caught' || form === 'hatching' || form === 'tongued' || form === 'eaten') {
         active?.giveUp()
         active = null
         hud.run(false)
@@ -325,6 +414,20 @@ export function createLane(scene, { hud, playerGroup, getAvatar }) {
         centre.lerpVectors(flyFrom, hold, k)
         orb.update(dt, centre, { x: 0, z: 0 }, active.yaw, 0)
         placePlayer(centre.x, centre.y - R, centre.z)
+      } else if (form === 'hatching' && hatchT < 0) {
+        // Waiting on the slot while the guardian goes to sleep: the orb settles, wobbles
+        // nervously now and then, wings drooping; a faint shimmer gathers round it.
+        waitT += dt
+        const s = hatchSlot
+        const wob = Math.max(0, Math.sin(waitT * 2.3)) ** 6
+        centre.set(s.x + Math.sin(waitT * 31) * 0.05 * wob, s.y + R + Math.abs(Math.sin(waitT * 3)) * 0.04, s.z)
+        orb.update(dt, centre, { x: 0, z: 0 }, active.yaw + Math.PI, 0)
+        if (Math.random() < dt * 8) glow({ x: s.x + (Math.random() - 0.5) * 2, y: s.y + Math.random() * 2, z: s.z + (Math.random() - 0.5) * 2, vy: 0.5, color: '#fff2c0', size: 0.22, size1: 0.04, life: 0.9 })
+        placePlayer(s.x, s.y, s.z)
+        if (hatchIn >= 0) {
+          hatchIn -= dt
+          if (hatchIn < 0) beginTransform()
+        } else if (waitT > 12) beginTransform() // never wait forever
       } else if (form === 'hatching') {
         hatchT += dt
         const s = hatchSlot
@@ -372,20 +475,47 @@ export function createLane(scene, { hud, playerGroup, getAvatar }) {
           flash(s.x, s.y + 1.2, s.z, RARITIES.find((r) => r.name === pending.rarity)?.color ?? '#ffffff', 80, 7)
           sfx.hatchPop()
           shake = Math.max(shake, 0.3)
+          punch = -7
         }
         if (actor && hatchT >= 1.6) actor.setGlow(Math.max(0, 1 - (hatchT - 1.6) / 0.35))
         placePlayer(s.x, s.y, s.z)
         if (hatchT >= T) finishHatch()
       }
 
+      // --- Caught by the tongue: reeled in at the tip, then (eaten) watch it chew ---
+      if (form === 'tongued' && active) {
+        target.x = p.x
+        target.z = p.z
+        target.y = p.y
+        if (active.tongueHit) {
+          const tip = active.tongueTip
+          placePlayer(tip.x, tip.y - 1.2, tip.z)
+          if (actor) {
+            actor.root.position.set(tip.x, tip.y - 1.2, tip.z)
+            actor.root.rotation.y += dt * 9 // spun round, flailing
+            actor.update(dt, 0, 'carried')
+          }
+        } else if (actor) {
+          // Still running while the tongue flies at it.
+          actor.root.position.set(p.x, p.y, p.z)
+          actor.root.rotation.y = player.facing
+          actor.update(dt, speed, 'run')
+        }
+        if (actorLabel && actor) actorLabel.position.set(actor.root.position.x, actor.root.position.y + 3.0, actor.root.position.z)
+      } else if (form === 'eaten') {
+        eatenT += dt
+        if (eatenT > 5.0) eaten() // watch it chew, gulp, laugh, burp, lick its lips and glare
+      }
+
       // --- Fighter running home ---
-      if (actor) {
+      if (actor && form !== 'tongued') {
         if (form === 'fighter') {
           actor.root.position.set(p.x, p.y, p.z)
           actor.root.rotation.y = player.facing
           actor.update(dt, speed, player.grounded ? 'run' : 'idle')
           target.x = p.x
           target.z = p.z
+          target.y = p.y
         } else actor.update(dt, 0, 'idle')
         if (actorLabel) actorLabel.position.set(actor.root.position.x, actor.root.position.y + 3.0, actor.root.position.z)
         actor.root.visible = !(firstPerson && form === 'fighter')
@@ -400,17 +530,57 @@ export function createLane(scene, { hud, playerGroup, getAvatar }) {
         const ev = g.update(dt, elapsed, Math.hypot(p.x - g.pos.x, p.z - g.pos.z) > 70)
         shake = Math.max(shake, g.shake)
         if (ev === 'caught' && g === active && form === 'orb') caught(g)
-        else if (ev === 'placed' && g === active && form === 'caught') startHatch()
+        else if (ev === 'placed' && g === active && form === 'caught') {
+          startHatch()
+          hatchIn = -1
+        } else if (ev === 'asleep' && g === active && form === 'hatching' && hatchT < 0) hatchIn = 0.9
         else if (ev === 'caughtFighter' && g === active && form === 'fighter') lose()
-      }
-      // The hunting guardian gives up once the fighter is well out of its zone (keep running!).
-      if (form === 'fighter' && active && active.state === 'hunt') {
-        const b = zoneBounds(guardians.indexOf(active))
-        if (p.z > b.start + G.leash + 10 || p.z < b.end - G.leash) {
-          active.giveUp()
-          active = null
+        else if (ev === 'tongueHit' && g === active && form === 'tongued') {
+          setFrozen(true) // stuck to the tongue
+          hud.flashScreen?.('#ff7aa8')
+          punch = -9
+        } else if (ev === 'swallowed' && g === active && form === 'tongued') {
+          form = 'eaten'
+          eatenT = 0
+          hud.flashScreen?.('#3a0008') // CHOMP
+          punch = -12
+          if (actor) actor.root.visible = false
+          if (actorLabel) actorLabel.visible = false
+          hud.run(false)
         }
       }
+      // The hunting guardian follows the fighter all the way to the safe zone (safeHome stops it).
+      // Running the wrong way (deeper into the lane, away from the safe zone) for
+      // LANE.wrongWayTime s makes it lash out with its tongue and eat the fighter.
+      if (form === 'fighter' && active && (active.state === 'hunt' || active.state === 'angry' || active.state === 'rouse')) {
+        const vz = player.velocity.z // the safe zone is toward +Z everywhere on the lane
+        if (vz < -2 && speed > 3) wrongT += dt
+        else if (vz > 1) wrongT = Math.max(0, wrongT - dt * 2)
+        if (wrongT > 1.5 && !warned) {
+          warned = true
+          sfx.warn()
+          hud.toast?.('Wrong way!', 'The Safe Zone is behind you - turn around!', '#ff5a4a')
+        }
+        if (wrongT < 0.5) warned = false
+        if (wrongT >= LANE.wrongWayTime) tongued()
+      }
+
+      // --- Camera effects + danger ---
+      // Danger rises as a chasing / hunting guardian closes in: wider FOV (rush), stronger red
+      // vignette and a faster heartbeat. When it wakes and roars, the view leans toward it.
+      let want = 0
+      if (active && (active.state === 'chase' || active.state === 'hunt') && (form === 'orb' || form === 'fighter')) {
+        const d = Math.hypot(p.x - active.pos.x, p.z - active.pos.z)
+        want = Math.min(1, Math.max(0, 1 - (d - 3) / 22))
+      }
+      danger += (want - danger) * (1 - Math.exp(-4 * dt))
+      punch *= Math.exp(-4 * dt)
+      camFx.fov = punch + danger * 8
+      const look = form === 'fighter' && active && ((active.state === 'rouse' && active.t > 0.6) || (active.state === 'angry' && active.t < 0.5))
+      camFx.lookW += ((look ? 0.45 : 0) - camFx.lookW) * (1 - Math.exp(-(look ? 3 : 2) * dt))
+      if (active) camFx.look.set(active.pos.x, active.pos.y + 4.2, active.pos.z)
+      if (form === 'fighter' && active?.state === 'rouse' && active.t > 1.6 && active.t < 1.7) punch = Math.max(punch, 6) // the roar pushes the view out
+      hud.danger?.(form === 'fighter' || form === 'orb' ? danger : 0)
 
       // --- Zone culling ---
       for (const z of lane.zones) {
@@ -418,7 +588,10 @@ export function createLane(scene, { hud, playerGroup, getAvatar }) {
         z.baked.visible = vis
         z.label.visible = vis
         for (const e of z.emitters) e.visible = vis
+        if (z.live) z.live.visible = vis
+        if (vis && z.update) z.update(dt, elapsed, p) // desert tumbleweeds, vultures, dust devils
       }
+      setLaneZone(zi >= 0 ? ZONES[zi].props : null) // the zone's sound bed (audio/ambience.js)
 
       // --- Held fighter ---
       syncHeld()

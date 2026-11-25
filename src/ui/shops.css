@@ -1,0 +1,682 @@
+/* Shop row windows (src/ui/fuse.js, skins.js, shops.js, spin.js, sell.js). Same chunky outlined
+   look as ui.css; relative units, 44px+ tap targets, reflows for phones. */
+
+/* --- Fuse Machine -------------------------------------------------------------------------- */
+.uiw.fuse {
+  --head: linear-gradient(#2f7fe8, #1d4fb0);
+  background: linear-gradient(#1d5a5a, #0f3a3a);
+}
+.uiw.fuse .uiw-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(6px, 1.4vh, 14px);
+  padding: clamp(8px, 1.8vh, 18px);
+}
+.fu-lead {
+  font-size: clamp(18px, 3.6vh, 34px);
+  text-align: center;
+}
+.fu-slots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(6px, 1.2vw, 14px);
+  width: min(100%, 560px);
+}
+.fu-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.fu-card {
+  position: relative;
+  aspect-ratio: 1;
+  border: 3px solid #0b1a14;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.12);
+}
+.fu-card .portrait {
+  position: absolute;
+  inset: 4% 8% 18%;
+  width: 84%;
+  height: 78%;
+}
+.fu-card.empty {
+  background: rgba(0, 0, 0, 0.28);
+}
+.fu-card.empty::after {
+  content: '+';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: clamp(28px, 6vh, 56px);
+  color: rgba(255, 255, 255, 0.25);
+}
+.fu-nm,
+.fu-ra {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: clamp(10px, 1.7vh, 15px);
+  padding: 0 3px;
+}
+.fu-nm {
+  top: 3px;
+}
+.fu-ra {
+  bottom: 3px;
+}
+.fu-add {
+  font-size: clamp(10px, min(2.4vh, 3.1vw), 22px);
+  padding: 0.1em 0.1em;
+  white-space: nowrap;
+}
+.fu-out-title {
+  font-size: clamp(14px, 2.6vh, 24px);
+  margin-top: 4px;
+}
+.fu-outs {
+  display: flex;
+  justify-content: center;
+  gap: clamp(6px, 1.2vw, 14px);
+  width: min(100%, 620px);
+  box-sizing: border-box; /* the padding stays inside 100% (no sideways scroll on phones) */
+  padding: clamp(8px, 1.4vh, 14px);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+}
+.fu-out {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  width: clamp(76px, 18vw, 120px);
+  aspect-ratio: 1.1;
+  padding: 6px 4px;
+  border: 3px solid #0b1a14;
+  border-radius: 8px;
+  background: radial-gradient(circle, #2c4a3c, #13261c);
+}
+.fu-out b {
+  font-size: clamp(12px, 2.2vh, 20px);
+  text-align: center;
+  line-height: 1.05;
+}
+.fu-out span {
+  font-size: clamp(16px, 3.2vh, 30px);
+}
+.fu-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: clamp(10px, 3vw, 48px);
+  width: 100%;
+}
+.fu-time {
+  font-size: clamp(18px, 3.8vh, 38px);
+}
+.fu-go {
+  min-width: clamp(140px, 22vw, 220px);
+}
+/* Picker over the window body. */
+.fu-picker {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  background: #10302a;
+  padding: clamp(6px, 1.2vh, 12px);
+  gap: 8px;
+}
+.fu-picker.open {
+  display: flex;
+}
+.fu-pick-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.fu-pick-head {
+  flex: 1;
+  font-size: clamp(16px, 3vh, 28px);
+}
+.fu-pick-x {
+  font-size: clamp(14px, 2.4vh, 22px);
+}
+.fu-pick-grid {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(clamp(92px, 16vw, 130px), 1fr));
+  gap: 8px;
+  align-content: start;
+}
+.fu-pick {
+  position: relative;
+  aspect-ratio: 0.85;
+  border: 3px solid #0b1a14;
+  border-radius: 8px;
+  color: #fff;
+  padding: 0;
+  overflow: hidden;
+}
+.fu-pick:active {
+  transform: scale(0.95);
+}
+.fu-pick .portrait {
+  position: absolute;
+  inset: 14% 10% 26%;
+  width: 80%;
+  height: 60%;
+}
+.fu-pick .nm,
+.fu-pick .inc,
+.fu-pick .ra {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 3px;
+  font-size: clamp(10px, 1.6vh, 14px);
+}
+.fu-pick .nm {
+  top: 4px;
+}
+.fu-pick .inc {
+  bottom: 20px;
+  color: #9dff3a;
+}
+.fu-pick .ra {
+  bottom: 3px;
+}
+
+/* --- Base Skins ----------------------------------------------------------------------------- */
+.uiw.skins {
+  --head: linear-gradient(#ff8ab0, #e84a7a);
+  background: #2a1a22;
+}
+.uiw.skins .uiw-title {
+  text-align: center;
+}
+.sk-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: clamp(150px, 26%, 240px);
+  gap: clamp(6px, 1vw, 12px);
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-x;
+  padding-bottom: 6px;
+}
+.sk-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: clamp(240px, 44vh, 360px);
+  padding: 10px 8px;
+  border: 4px solid #0b1a14;
+  border-radius: 10px;
+  background: linear-gradient(var(--a), var(--b));
+}
+.sk-card.on {
+  box-shadow: 0 0 0 3px #fff inset;
+}
+.sk-card.locked {
+  background: linear-gradient(#262a30, #15181c);
+}
+.sk-name {
+  font-size: clamp(18px, 3.4vh, 32px);
+  text-align: center;
+}
+.sk-card.locked .sk-name {
+  opacity: 0.35;
+}
+.sk-pic,
+.sk-lock {
+  width: 78%;
+  flex: 1;
+  display: grid;
+  place-items: center;
+}
+.sk-pic svg {
+  width: 100%;
+  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.3));
+}
+.sk-lock svg {
+  width: 70%;
+}
+.sk-lock,
+.sk-note {
+  display: none;
+}
+.sk-card.locked .sk-pic {
+  display: none;
+}
+.sk-card.locked .sk-lock,
+.sk-card.locked .sk-note {
+  display: grid;
+}
+.sk-note {
+  font-size: clamp(12px, 2vh, 18px);
+  text-align: center;
+  line-height: 1.15;
+}
+.sk-card.locked .sk-btn {
+  display: none;
+}
+.sk-btn {
+  width: 100%;
+  font-size: clamp(15px, 2.6vh, 24px);
+}
+.sk-btn.on {
+  filter: brightness(0.9);
+}
+
+/* --- Treadmills Shop + Dragon Ball Shop ------------------------------------------------------ */
+.uiw.treads {
+  --head: linear-gradient(#7af0ff, #1fa8e8);
+  background: #1b2a33;
+}
+.uiw.balls {
+  --head: linear-gradient(#ff7a2a, #e01a1a);
+  background: #0b1a10;
+}
+.sh-list {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 1.2vh, 12px);
+}
+.sh-card {
+  display: flex;
+  align-items: stretch;
+  gap: clamp(6px, 1.4vw, 14px);
+  min-height: clamp(96px, 17vh, 160px);
+  padding: 6px;
+  border: 4px solid #0b1a14;
+  border-radius: 8px;
+  background: linear-gradient(100deg, var(--a), var(--b));
+}
+.sh-card.on {
+  box-shadow: 0 0 0 3px #fff inset;
+}
+.sh-pic {
+  width: clamp(84px, 22%, 160px);
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.15);
+}
+.uiw.balls .sh-pic {
+  background: #050d07;
+}
+.sh-pic svg {
+  width: 92%;
+  height: 92%;
+}
+.sh-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sh-name {
+  font-size: clamp(17px, 3.2vh, 32px);
+  line-height: 1.05;
+}
+.sh-tag {
+  align-self: flex-start;
+  padding: 0 0.3em;
+  border-radius: 4px;
+  background: #ffe14a;
+  color: #fff;
+  font-size: clamp(12px, 2.2vh, 20px);
+  -webkit-text-stroke-color: #8a4a00;
+}
+.sh-rarity {
+  font-size: clamp(14px, 2.6vh, 24px);
+}
+.sh-luck {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: clamp(16px, 3vh, 28px);
+}
+.sh-luck svg {
+  width: clamp(24px, 4.6vh, 44px);
+  height: clamp(24px, 4.6vh, 44px);
+}
+.sh-btns {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+}
+.sh-btn {
+  min-width: clamp(120px, 40%, 240px);
+}
+.sh-btn.on {
+  filter: brightness(0.92);
+}
+.sh-btn.equip {
+  border-color: #0b2a6a;
+  background: linear-gradient(#8ad8ff, #2f8bff 55%, #1d5fd0);
+  -webkit-text-stroke-color: #0b2a6a;
+}
+
+/* --- Dragon Spin --------------------------------------------------------------------------- */
+.uiw.spin {
+  --head: linear-gradient(#4fe05a, #1f8a2a);
+  background: rgba(10, 30, 16, 0.92);
+}
+.uiw.spin .uiw-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(8px, 1.6vh, 16px);
+}
+.sp-stage {
+  position: relative;
+  container-type: inline-size; /* wedge labels scale with the wheel (cqi) */
+  width: min(100%, 52dvh, 440px);
+  aspect-ratio: 1;
+  flex: none;
+}
+.sp-wheel {
+  position: absolute;
+  inset: 4% 0 0;
+  border-radius: 50%;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35);
+  overflow: hidden; /* the rotated label boxes reach past the circle; they'd make the window scroll */
+}
+.sp-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.sp-lab {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--r));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 7%;
+  gap: 1%;
+  pointer-events: none;
+}
+.sp-lab b {
+  font-size: 5.6cqi;
+  white-space: nowrap;
+}
+.sp-lab i {
+  width: 15%;
+  aspect-ratio: 1;
+}
+.sp-lab i svg {
+  width: 100%;
+  height: 100%;
+}
+.sp-lab small {
+  font-size: 3.6cqi;
+}
+.sp-hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 3px solid #0b1a14;
+  background: radial-gradient(circle at 35% 30%, #fff, #d8dce8);
+}
+.sp-pointer {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 8%;
+  aspect-ratio: 0.8;
+  transform: translateX(-50%);
+  background: linear-gradient(#7dff5a, #1f8a2a);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  filter: drop-shadow(0 2px 0 #0b1a14);
+}
+.sp-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: clamp(6px, 1.6vw, 14px);
+  width: 100%;
+}
+.sp-pack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  max-width: 220px;
+  min-width: 0;
+}
+.sp-pack .ui-btn {
+  width: 100%;
+  font-size: clamp(14px, min(2.8vh, 4.4vw), 28px);
+  white-space: nowrap;
+}
+.sp-buy {
+  border-color: #0b2a6a;
+  background: linear-gradient(#8ad8ff, #2f8bff 55%, #1d5fd0);
+  -webkit-text-stroke-color: #0b2a6a;
+}
+.sp-buy.mega {
+  border-color: #3a0a4a;
+  background: linear-gradient(90deg, #ff5a8a, #ffb04a, #ffe14a, #7dff5a, #5ac8ff, #c86aff);
+  -webkit-text-stroke-color: #3a0a4a;
+}
+.sp-tag,
+.sp-sub {
+  font-size: clamp(11px, 1.9vh, 17px);
+  white-space: nowrap;
+}
+
+/* --- Sell dialog --------------------------------------------------------------------------- */
+/* Bottom centre above the hotbar: clear of the right-hand menu grid and the left counters. */
+.sell-dlg {
+  position: fixed;
+  z-index: 55;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + clamp(84px, 13vh, 120px));
+  transform: translateX(-50%);
+  width: min(94vw, 520px);
+  display: none;
+  flex-direction: column;
+  gap: clamp(4px, 0.8vh, 8px);
+  font-family: Fredoka, 'Arial Black', sans-serif;
+  font-weight: 700;
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+  --ink: #0b1a14;
+}
+.sell-dlg.open {
+  display: flex;
+}
+.sell-say {
+  font-size: clamp(14px, 2.4vh, 22px);
+  color: #ffe14a;
+}
+.sell-opt {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  min-height: 44px;
+  padding: 0.1em 0.5em 0.1em 0;
+  border: 3px solid #0b1a14;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(10, 40, 24, 0.92), rgba(16, 60, 34, 0.85));
+  color: #fff;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: clamp(16px, 3vh, 30px);
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.sell-opt:active {
+  transform: scale(0.97);
+}
+.sell-opt i {
+  font-style: normal;
+  color: #ff3a5a;
+  font-size: 1.4em;
+  line-height: 1;
+  margin-left: -0.3em;
+  -webkit-text-stroke-color: #fff;
+}
+/* Touch: clear of the joystick and jump cluster, so you can still walk off the pad. */
+@media (pointer: coarse) {
+  .sell-dlg {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 190px);
+    width: min(80vw, 460px);
+  }
+}
+@media (max-width: 560px) {
+  .fu-slots {
+    gap: 5px;
+  }
+  .sh-btn {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+/* --- Phone portrait: Base Skins as a 2-column grid scrolling down (not sideways). ------------- */
+@media (max-width: 600px) {
+  .sk-grid {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-columns: auto;
+    overflow-x: visible;
+    touch-action: pan-y;
+  }
+  .sk-card {
+    min-height: clamp(200px, 30vh, 280px);
+  }
+}
+
+/* --- Phone landscape (short screens): use the width, keep every control above the fold. ------- */
+@media (max-height: 520px) {
+  /* Fuse: slots on the left, outcomes + timer + button on the right. */
+  .uiw.fuse .uiw-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    grid-template-areas: 'lead otitle' 'slots outs' 'slots foot';
+    align-items: center;
+    justify-items: center;
+    column-gap: 14px;
+    row-gap: 6px;
+  }
+  .fu-lead {
+    grid-area: lead;
+    font-size: 17px;
+  }
+  .fu-slots {
+    grid-area: slots;
+    width: 100%;
+  }
+  .fu-out-title {
+    grid-area: otitle;
+    margin: 0;
+    font-size: 15px;
+  }
+  .fu-outs {
+    grid-area: outs;
+    padding: 6px;
+  }
+  .fu-out {
+    width: auto;
+    flex: 1;
+    aspect-ratio: auto;
+    min-height: 64px;
+  }
+  .fu-foot {
+    grid-area: foot;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .fu-time {
+    font-size: 18px;
+  }
+  .fu-add {
+    font-size: 13px;
+  }
+  /* Spin: buttons in a column beside a full-height wheel. */
+  .uiw.spin .uiw-body {
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+  .sp-stage {
+    width: min(60vw, calc(100dvh - 124px));
+  }
+  .sp-row {
+    flex-direction: column;
+    align-items: stretch;
+    width: auto;
+    min-width: 170px;
+    max-width: 230px;
+    gap: 6px;
+  }
+  .sp-pack {
+    max-width: none;
+  }
+  /* Treadmills / Dragon Ball Shop: two compact columns. */
+  .sh-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sh-card {
+    min-height: 0;
+  }
+  .sh-pic {
+    width: 76px;
+  }
+  .sh-name {
+    font-size: 16px;
+  }
+  .sh-btn {
+    min-width: 0;
+    width: 100%;
+    font-size: 16px;
+  }
+  /* Sell: narrower, low in the middle, between the joystick and the right-hand buttons. */
+  .sell-dlg {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 64px);
+    width: min(46vw, 380px);
+    gap: 3px;
+  }
+  .sell-opt {
+    font-size: 15px;
+  }
+  .sell-say {
+    font-size: 13px;
+  }
+}

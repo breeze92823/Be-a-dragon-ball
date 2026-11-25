@@ -11,7 +11,7 @@ import { createLighting } from './lighting.js'
 import { createWorld } from './world.js'
 import { buildSafeZone } from './safezone/index.js'
 import { setParticleDensity, updateParticles } from './particles.js'
-import { installAudio, updateAudio } from './audio/index.js'
+import { installAudio, updateAudio, updateMusic } from './audio/index.js'
 import { createPostFx } from './postfx.js'
 import { setNeonBloom } from './propkit.js'
 import { buildDefaultCharacter, loadBaseCharacter } from './avatar/character.js'
@@ -21,6 +21,7 @@ import { installFx, updateFx } from './fx.js'
 import { createHud } from './hud/hud.js'
 import { createLane } from './lane/index.js'
 import { createMyBase } from './base/mybase.js'
+import { createBaseBoard } from './base/board.js'
 import { initUi } from './ui/index.js'
 import { load as loadProgress, state, tickSave, changed, addFighter } from './state.js'
 import { makeFighter, rosterFor } from './roster.js'
@@ -131,6 +132,8 @@ loadProgress()
 const hud = createHud({ renderer, onTeleport: teleportTo })
 const lane = createLane(scene, { hud, playerGroup, getAvatar: () => avatar })
 const myBase = createMyBase(scene, safeZone.mySlots.slice(0, BASE.slots), { hud })
+// Your base's entrance boards: clickable with the free cursor / a tap (base/board.js).
+const baseBoard = createBaseBoard(scene, safeZone.myBoards, { camera, canvas: renderer.domElement, hud, myBase })
 // --- Treadmill / Backpack / Net ---
 // Treadmill: the HUD's Treadmill button (or T) trains Speed in the safe zone. Backpack: the bag
 // button opens the fighter inventory over the hotbar. Net: progress loads from / saves to the
@@ -139,7 +142,7 @@ const treadmill = createTreadmill(scene, { hud, camera, renderer })
 createBackpack({ hud, renderer })
 initNet()
 // Windows (src/ui/): Index, Rebirth, Quests, Playtime + Daily Rewards, Settings, x2 Speed.
-const ui = initUi({ hud, renderer, camera, applySetting, portalQuality: () => bloxity.settings.graphics_quality })
+const ui = initUi({ hud, renderer, camera, applySetting, portalQuality: () => bloxity.settings.graphics_quality, safeZone })
 // Respawning (R, touch, portal) while out on the lane loses the orb run / the fighter.
 const respawnAll = () => {
   lane.onRespawn()
@@ -190,10 +193,11 @@ let shownLoading = true
 const cinePos = new Vector3()
 const cineLook = new Vector3()
 const chaseLook = new Vector3()
+let orbChased = false
 let cineBlend = 0
 let readySince = 0
 
-renderer.setAnimationLoop(() => {
+function frame() {
   const dt = Math.min(clock.getDelta(), 0.1) // clamp huge frames (tab switch, breakpoint)
   const elapsed = clock.elapsedTime
 
@@ -214,6 +218,7 @@ renderer.setAnimationLoop(() => {
 
   lane.update(dt, elapsed, p, isFirstPerson())
   myBase.update(dt, elapsed, p, lane.form)
+  baseBoard.update(dt, p, lane.form)
   treadmill.update(dt, elapsed) // --- Treadmill ---
   updateCamera(camera, dt)
   // Carried / hatching: ease to the lane's cinematic shot through the base's open front.
@@ -236,12 +241,26 @@ renderer.setAnimationLoop(() => {
     camera.position.lerp(cinePos, cineBlend)
     camera.lookAt(chaseLook.lerp(cineLook, cineBlend))
   }
-  // Guardian stomps / roars / grabs shake the camera a little.
+  // Lane camera effects: the view leans toward a waking / roaring guardian, the FOV kicks
+  // (zoom-in on a catch or hatch, widening as a guardian closes in).
+  const fx = lane.camFx
+  if (fx.lookW > 0.01 && cineBlend < 0.5) {
+    camera.getWorldDirection(chaseLook).multiplyScalar(12).add(camera.position)
+    camera.lookAt(chaseLook.lerp(fx.look, fx.lookW))
+  }
+  // (camera.js rewrites camera.fov every frame it differs from its own value, so the kick is
+  // simply added on top again each frame.)
+  if (Math.abs(fx.fov) > 0.02) {
+    camera.fov += fx.fov
+    camera.updateProjectionMatrix()
+  }
+  // Guardian stomps / roars / grabs shake the camera a little (a tilt wobble too).
   const shake = lane.shake
   if (shake > 0.01) {
     camera.position.x += (Math.random() - 0.5) * shake * 0.5
     camera.position.y += (Math.random() - 0.5) * shake * 0.5
     camera.position.z += (Math.random() - 0.5) * shake * 0.5
+    camera.rotateZ((Math.random() - 0.5) * shake * 0.03)
   }
   world.update(dt, elapsed)
   safeZone.update(dt, elapsed, p)
@@ -260,6 +279,11 @@ renderer.setAnimationLoop(() => {
   audioState.surface = safeZone.surfaceAt(p)
   audioState.inDesert = safeZone.inDesert
   updateAudio(dt, audioState)
+  // Music follows the situation: hub calm, lane adventure, hatch mystery, chase tension.
+  const f = lane.form
+  if (lane.danger > 0.45) orbChased = true // hysteresis: no flapping between moods
+  else if (lane.danger < 0.15) orbChased = false
+  updateMusic(f === 'human' ? 'safe' : f === 'orb' ? (orbChased ? 'chase' : 'lane') : f === 'caught' || f === 'hatching' ? 'hatch' : 'chase')
   lighting.update(dt, playerGroup.position)
   postfx.render()
 
@@ -271,7 +295,8 @@ renderer.setAnimationLoop(() => {
       bloxity.notifyFirstFrame()
     }
   }
-})
+}
+renderer.setAnimationLoop(frame)
 
 window.addEventListener('beforeunload', bloxity.teardown)
 
@@ -294,5 +319,6 @@ if (import.meta.env.DEV) {
     const list = rosterFor(rarity)
     addFighter(makeFighter(list[Math.floor(Math.random() * list.length)], state.nextId++))
   }
-  window.__game = { player, scene, renderer, camera, postfx, bodies: bodyCount, toggleMode, teleport, safeZone, lane, state, setSpeed, giveMoney, giveFighter, hud }
+  // frame: one loop iteration (drive it with setInterval when the tab is hidden and rAF stalls)
+  window.__game = { player, scene, renderer, camera, postfx, bodies: bodyCount, toggleMode, teleport, safeZone, lane, state, setSpeed, giveMoney, giveFighter, hud, frame }
 }

@@ -74,7 +74,7 @@ export async function buildSafeZone(scene) {
   const padCooldown = new Map()
   const spots = [
     stalls.freeReward && { ...stalls.freeReward, title: 'Claim Free Reward', sub: 'Like the game + Favorite to claim', color: '#7dff5a', sound: 'sparkle' },
-    stalls.orbPack && { ...stalls.orbPack, title: `Orb Pack ${Z.orbPack.price}`, sub: '3 Orbs, paid with cash only', color: '#ff4a4a', sound: 'pad' },
+    stalls.orbPack && { ...stalls.orbPack, title: `Dragon Ball Pack ${Z.orbPack.price}`, sub: '3 Dragon Balls, paid with cash only', color: '#ff4a4a', sound: 'pad' },
   ].filter(Boolean)
   const spotIn = new Set()
 
@@ -91,9 +91,15 @@ export async function buildSafeZone(scene) {
     return 'plastic'
   }
 
-  return {
+  const api = {
+    // onShop(id, on): the player stepped onto (on) / off a shop pad; the windows open from it.
+    onShop: null,
+    // Base Skins: repaints your base (bases.js makeSkinner).
+    setBaseSkin: (skin) => bases.skin?.setSkin(skin),
+    spinWheel: stalls.wheel,
     mySlots: bases.mySlots,
     homeZone: bases.homeZone,
+    myBoards: bases.boards, // your base's board panels + owner label spot (base/board.js)
     fuse,
     get inDesert() {
       return inDesert
@@ -133,8 +139,8 @@ export async function buildSafeZone(scene) {
         const on = d < pad.r && p.y < 1.5
         if (on && !pad.on) {
           sfx.padEnter(spatial(pad.x, pad.z, 20).pan * 0.5)
-          toast(pad.shop.title, pad.shop.note, pad.shop.pad)
-        }
+          if (!api.onShop?.(pad.shop.id, true)) toast(pad.shop.title, pad.shop.note, pad.shop.pad) // no window: just the notice
+        } else if (!on && pad.on) api.onShop?.(pad.shop.id, false)
         pad.on = on
         pad.heat += ((on ? 1 : 0) - pad.heat) * Math.min(1, dt * 6)
         pad.mat.opacity = 0.62 + 0.18 * Math.sin(elapsed * 2.4 + pad.x) + pad.heat * 0.3
@@ -151,7 +157,7 @@ export async function buildSafeZone(scene) {
           }
         }
       }
-      // Free reward / Orb Pack spots.
+      // Free reward / Dragon Ball Pack spots.
       for (const s of spots) {
         const on = Math.hypot(p.x - s.x, p.z - s.z) < s.r
         if (on && !spotIn.has(s)) {
@@ -170,4 +176,5 @@ export async function buildSafeZone(scene) {
       }
     },
   }
+  return api
 }

@@ -1,4 +1,4 @@
-import { LANE, BASE, BOOSTS, GAME_SETTINGS, REBIRTH } from './config.js'
+import { LANE, BASE, BASE_BOARD, BALLS, BOOSTS, GAME_SETTINGS, REBIRTH, TREADMILLS } from './config.js'
 
 // The player's progress: money, Speed stat, the fighters in the hotbar and the
 // Backpack, and the ones placed on base slots. Saved ONLY on the game server
@@ -25,6 +25,20 @@ export const state = {
   speedBoostUntil: 0,
   luckBoostUntil: 0,
   settings: { ...GAME_SETTINGS },
+  // Shops (src/ui/): equipped base skin ("" = Default), owned + equipped treadmill and Dragon
+  // Ball ("" = the starter one, always owned), x2 Money boost end time.
+  baseSkin: '',
+  treadmills: [],
+  treadmill: '',
+  balls: [],
+  ball: '',
+  moneyBoostUntil: 0,
+  // Base boards (base/board.js): Base Upgrade steps bought, Auto Collect owned + switched on,
+  // Upgrade Max All owned.
+  baseLevel: 0,
+  autoCollect: false,
+  autoCollectOn: true,
+  upgradeMax: false,
 }
 
 const listeners = new Set()
@@ -48,6 +62,8 @@ export function snapshot() {
     money: state.money, speed: state.speed, inventory: state.inventory, backpack: state.backpack, slots: state.slots, nextId: state.nextId,
     rebirths: state.rebirths, playtime: Math.floor(state.playtime), discovered: [...state.discovered], indexClaimed: state.indexClaimed,
     speedBoostUntil: state.speedBoostUntil, luckBoostUntil: state.luckBoostUntil, settings: state.settings,
+    baseSkin: state.baseSkin, treadmills: state.treadmills, treadmill: state.treadmill, balls: state.balls, ball: state.ball, moneyBoostUntil: state.moneyBoostUntil,
+    baseLevel: state.baseLevel, autoCollect: state.autoCollect, autoCollectOn: state.autoCollectOn, upgradeMax: state.upgradeMax,
   }
 }
 
@@ -76,6 +92,17 @@ export function hydrate(doc) {
   if (typeof doc.speedBoostUntil === 'number') state.speedBoostUntil = doc.speedBoostUntil
   if (typeof doc.luckBoostUntil === 'number') state.luckBoostUntil = doc.luckBoostUntil
   if (doc.settings && typeof doc.settings === 'object') state.settings = { ...GAME_SETTINGS, ...doc.settings }
+  if (typeof doc.moneyBoostUntil === 'number') state.moneyBoostUntil = doc.moneyBoostUntil
+  if (typeof doc.baseSkin === 'string') state.baseSkin = doc.baseSkin
+  const ids = (a, list) => (Array.isArray(a) ? a.filter((id) => typeof id === 'string' && id && list.some((x) => x.id === id)) : [])
+  if (Array.isArray(doc.treadmills)) state.treadmills = ids(doc.treadmills, TREADMILLS)
+  if (Array.isArray(doc.balls)) state.balls = ids(doc.balls, BALLS)
+  if (typeof doc.treadmill === 'string') state.treadmill = state.treadmills.includes(doc.treadmill) ? doc.treadmill : ''
+  if (typeof doc.ball === 'string') state.ball = state.balls.includes(doc.ball) ? doc.ball : ''
+  if (typeof doc.baseLevel === 'number') state.baseLevel = Math.max(0, Math.min(BASE_BOARD.upgrade.prices.length, Math.floor(doc.baseLevel)))
+  if (typeof doc.autoCollect === 'boolean') state.autoCollect = doc.autoCollect
+  if (typeof doc.autoCollectOn === 'boolean') state.autoCollectOn = doc.autoCollectOn
+  if (typeof doc.upgradeMax === 'boolean') state.upgradeMax = doc.upgradeMax
   state.selected = -1
   changed()
   dirty = false // this IS the saved state
@@ -100,8 +127,17 @@ export const moneyMulti = () => 1 + state.rebirths * REBIRTH.multiStep
 // The Speed stat with the x2 Speed boost applied: what the lane's orb runs on.
 export const speedBoosted = () => Date.now() < state.speedBoostUntil
 export const luckBoosted = () => Date.now() < state.luckBoostUntil
+export const moneyBoosted = () => Date.now() < state.moneyBoostUntil
 export const effectiveSpeed = () => state.speed * (speedBoosted() ? BOOSTS.speed.multi : 1)
-export const luckMulti = () => (luckBoosted() ? BOOSTS.luck.multi : 1)
+// The equipped Dragon Ball / treadmill (catalog entries; "" = the starter one).
+export const equippedBall = () => BALLS.find((b) => b.id === state.ball) ?? BALLS[0]
+export const equippedTreadmill = () => TREADMILLS.find((t) => t.id === state.treadmill) ?? TREADMILLS[0]
+// Luck: the x2 Luck boost x the equipped Dragon Ball.
+export const luckMulti = () => (luckBoosted() ? BOOSTS.luck.multi : 1) * equippedBall().luck
+// Your base's own Cash Multi from the Base Upgrade sign (x1, x1.5 ... x3.5).
+export const baseMulti = () => 1 + state.baseLevel * BASE_BOARD.upgrade.multiStep
+// Base income: the rebirth multiplier x the x2 Money boost.
+export const cashMulti = () => moneyMulti() * (moneyBoosted() ? BOOSTS.money.multi : 1)
 
 // Game events the windows count (Index discoveries, Daily Quests). fn(kind, data):
 // 'hatch' (fighter), 'sell' (n).
@@ -135,10 +171,34 @@ export function addFighter(f) {
   changed()
 }
 
+// Every fighter you carry (hotbar, then Backpack).
+export const allFighters = () => [...state.inventory, ...state.backpack]
+
+// Takes fighters out of the hotbar / Backpack by id; returns the ones removed.
+export function removeFighters(ids) {
+  const want = new Set(ids)
+  const out = []
+  const keep = (list) => list.filter((f) => (want.has(f.id) ? (out.push(f), false) : true))
+  const heldF = held()
+  state.inventory = keep(state.inventory)
+  state.backpack = keep(state.backpack)
+  state.selected = heldF ? state.inventory.indexOf(heldF) : -1
+  if (out.length) changed()
+  return out
+}
+
 export const held = () => (state.selected >= 0 ? state.inventory[state.selected] ?? null : null)
 
 export function select(i) {
   state.selected = state.selected === i || i >= state.inventory.length ? -1 : i
+  changed()
+}
+
+// Puts a fighter back into the hotbar (or the Backpack when it is full) without changing
+// what is held (Place Best's swaps).
+export function stashFighter(f) {
+  if (state.inventory.length < LANE.hotbarSlots) state.inventory.push(f)
+  else state.backpack.unshift(f)
   changed()
 }
 

@@ -12,6 +12,8 @@ import {
 } from 'three'
 import { LANE } from '../config.js'
 import { glow } from '../fx.js'
+import { ballTexture } from '../balls.js'
+import { equippedBall } from '../state.js'
 
 // The winged orb the player turns into on the lane: a glossy deep-mauve sphere
 // with white stars, on two blocky feathered wings. The sphere rolls with the
@@ -104,7 +106,7 @@ export function createOrb(scene) {
 
   const ball = new Mesh(
     new SphereGeometry(R, 40, 28),
-    new MeshPhysicalMaterial({ map: starTexture(), roughness: 0.28, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.12, sheen: 0.3, sheenColor: 0xffc0e0 }),
+    new MeshPhysicalMaterial({ map: ballTexture(equippedBall().look), roughness: 0.28, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.12, sheen: 0.3, sheenColor: 0xffc0e0 }),
   )
   ball.castShadow = true
   root.add(ball)
@@ -136,6 +138,12 @@ export function createOrb(scene) {
     show(on) {
       root.visible = on
       if (on) pop = 0
+      // The equipped Dragon Ball (Dragon Ball Shop) is the ball you roll as.
+      const map = ballTexture(equippedBall().look)
+      if (on && ball.material.map !== map) {
+        ball.material.map = map
+        ball.material.needsUpdate = true
+      }
     },
     get visible() {
       return root.visible

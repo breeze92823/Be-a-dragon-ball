@@ -1,9 +1,9 @@
 import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from 'three'
-import { BASE, MUTATIONS, RARITIES } from '../config.js'
+import { BASE, BASE_BOARD, MUTATIONS, RARITIES } from '../config.js'
 import { DynLabel, paintLines, roundRect, short, strokeText } from '../safezone/text.js'
 import { FighterActor } from '../lane/actor.js'
 import * as store from '../state.js'
-import { addFighter, addMoney, changed, held, state, takeHeld } from '../state.js'
+import { addFighter, addMoney, allFighters, baseMulti, changed, held, removeFighters, stashFighter, state, takeHeld } from '../state.js'
 import { sfx } from '../audio/index.js'
 import { flash, glow, puff } from '../fx.js'
 
@@ -14,11 +14,12 @@ import { flash, glow, puff } from '../fx.js'
 // Step on the pad to collect: bundles of cash fly into you with "+$" pops.
 // On a filled slot, E picks the fighter up (or swaps it with the one you hold).
 // The orange sign in front of each slot upgrades it (more income per level).
+// The control board at the entrance (base/board.js) drives the bulk actions below.
 
 const deg = (d) => (d * Math.PI) / 180
 const levelMult = (lv) => 1 + BASE.levelIncome * (lv - 1)
-const upgradePrice = (f, lv) => Math.round(f.income * BASE.upgradeCost * Math.pow(BASE.upgradeGrowth, lv - 1))
-export const slotIncome = (sl) => (sl.fighter ? sl.fighter.income * levelMult(sl.level) * BASE.cashMulti * (store.moneyMulti?.() ?? 1) : 0)
+export const upgradePrice = (f, lv) => Math.round(f.income * BASE.upgradeCost * Math.pow(BASE.upgradeGrowth, lv - 1))
+export const slotIncome = (sl) => (sl.fighter ? sl.fighter.income * levelMult(sl.level) * BASE.cashMulti * baseMulti() * (store.cashMulti?.() ?? 1) : 0)
 
 export function createMyBase(scene, infos, { hud }) {
   const slots = infos.map((info, i) => {
@@ -159,6 +160,118 @@ export function createMyBase(scene, infos, { hud }) {
     if (o.actor) o.drop = 0.55 // a little hop
   }
 
+  // --- Control board actions (base/board.js) ---
+  // One cheapest-first pass: every filled slot gets at most one level, while the cash lasts.
+  function upgradeAll() {
+    const list = slots.filter((o) => o.s.fighter).sort((a, b) => upgradePrice(a.s.fighter, a.s.level) - upgradePrice(b.s.fighter, b.s.level))
+    let n = 0
+    for (const o of list) {
+      const price = upgradePrice(o.s.fighter, o.s.level)
+      if (state.money < price) break
+      state.money -= price
+      o.s.level++
+      bumped(o)
+      n++
+    }
+    return finishUpgrades(n)
+  }
+  // Keeps buying the cheapest upgrade until none is affordable.
+  function upgradeMaxAll() {
+    let n = 0
+    while (n < BASE_BOARD.maxUpgrades) {
+      let best = null
+      let bestP = Infinity
+      for (const o of slots) {
+        if (!o.s.fighter) continue
+        const pr = upgradePrice(o.s.fighter, o.s.level)
+        if (pr < bestP) {
+          bestP = pr
+          best = o
+        }
+      }
+      if (!best || state.money < bestP) break
+      state.money -= bestP
+      best.s.level++
+      n++
+    }
+    for (const o of slots) if (o.s.fighter && n) bumped(o)
+    return finishUpgrades(n)
+  }
+  function bumped(o) {
+    o.signText = ''
+    flash(o.info.x, o.info.y + 1.4, o.info.z, '#ffb03a', 30, 4)
+    if (o.actor) o.drop = 0.55
+  }
+  function finishUpgrades(n) {
+    if (!n) return 0
+    changed()
+    sfx.upgrade()
+    return n
+  }
+  // Fills empty slots with your best carried fighters, then swaps carried fighters that earn more
+  // than the weakest placed ones (those go back into the hotbar / Backpack). Returns the moves made.
+  function placeBest() {
+    const carried = allFighters().slice().sort((a, b) => b.income - a.income)
+    let moves = 0
+    for (const f of carried) {
+      let target = slots.find((o) => !o.s.fighter)
+      if (!target) {
+        const weakest = slots.reduce((w, o) => (!w || o.s.fighter.income < w.s.fighter.income ? o : w), null)
+        if (!weakest || weakest.s.fighter.income >= f.income) break
+        target = weakest
+      }
+      removeFighters([f.id])
+      const old = target.s.fighter
+      target.s.fighter = f
+      if (old) stashFighter(old)
+      syncSlot(target, true)
+      moves++
+    }
+    if (moves) {
+      changed()
+      sfx.place()
+    }
+    return moves
+  }
+  // What the board shows: the cost of one Upgrade All pass, and how many Place Best moves exist.
+  function boardStats() {
+    let upCost = 0
+    let filled = 0
+    for (const o of slots) {
+      if (!o.s.fighter) continue
+      filled++
+      upCost += upgradePrice(o.s.fighter, o.s.level)
+    }
+    let cheapest = Infinity
+    for (const o of slots) if (o.s.fighter) cheapest = Math.min(cheapest, upgradePrice(o.s.fighter, o.s.level))
+    const empty = slots.length - filled
+    const placed = slots.filter((o) => o.s.fighter).map((o) => o.s.fighter.income).sort((a, b) => a - b)
+    const carried = allFighters().map((f) => f.income).sort((a, b) => b - a)
+    let better = Math.min(empty, carried.length)
+    for (let i = better, j = 0; i < carried.length && j < placed.length && carried[i] > placed[j]; i++, j++) better++
+    return { filled, upCost, cheapest, better }
+  }
+
+  // Auto Collect: sweeps every pad into your cash once per interval (no walking to the pads).
+  let autoIn = 0
+  function autoCollect(dt) {
+    if (!state.autoCollect || !state.autoCollectOn) return
+    autoIn -= dt
+    if (autoIn > 0) return
+    autoIn = BASE_BOARD.autoCollect.interval
+    let total = 0
+    for (const o of slots) {
+      const amount = Math.floor(o.s.stored)
+      if (amount < 1) continue
+      o.s.stored -= amount
+      total += amount
+      o.padText = ''
+    }
+    if (!total) return
+    addMoney(total)
+    hud.moneyPop()
+  }
+
   let collectCd = 0
   function collect(o, p) {
     const amount = Math.floor(o.s.stored)
@@ -194,7 +307,12 @@ export function createMyBase(scene, infos, { hud }) {
   }
 
   return {
+    upgradeAll,
+    upgradeMaxAll,
+    placeBest,
+    boardStats,
     update(dt, elapsed, p, form) {
+      autoCollect(dt)
       // Income -> pads.
       for (const o of slots) {
         o.s.stored += slotIncome(o.s) * dt

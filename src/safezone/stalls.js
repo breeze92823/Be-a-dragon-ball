@@ -8,6 +8,7 @@ import {
   Group,
   Mesh,
   MeshBasicMaterial,
+  MeshPhysicalMaterial,
   OctahedronGeometry,
   Quaternion,
   Shape,
@@ -16,7 +17,8 @@ import {
   TorusGeometry,
   Vector3,
 } from 'three'
-import { SAFE_ZONE } from '../config.js'
+import { BALLS, SAFE_ZONE, SPIN } from '../config.js'
+import { ballTexture } from '../balls.js'
 import { M, S, box, boxC, cyl, cylC, cone, ball, mesh, bakeInto, solid, groundDecal, decalMaterial, deg } from './kit.js'
 import { strokeText } from './text.js'
 import { buildFighter, fighterLook } from './fighters.js'
@@ -26,7 +28,7 @@ import { bake } from '../bake.js'
 
 // The shop row and the other set pieces of the safe zone (screenshots 2-4,
 // 7, 8, 15-19): Sell stall, Dragon Spin wheel with its coiled serpent, the Orb
-// Shop pod, Treadmill Shop kiosk, Cash Shop pagoda, Base Skins tower, Fuse
+// Dragon Ball Shop, Treadmill Shop kiosk, Cash Shop pagoda, Base Skins tower, Fuse
 // Machine, the Claim Free Reward statue, Suggestions booth and the Orb Pack
 // display. Static parts of each are baked; the few moving parts (wheel,
 // crystal, orbs, pads) stay separate and are animated by `update`.
@@ -100,16 +102,25 @@ export function buildStalls(scene, signs, labels) {
     pad(s, s.x, s.z + 2.6)
     title(s, 14.6, '#7dff5a')
   }
-  // --- Orb Shop pod ---
+  // --- Dragon Ball Shop ---
   {
-    const s = byId.orbs
+    const s = byId.balls
     const g = new Group()
-    g.position.set(s.x, 0, s.z)
-    orbPod(g, signs)
+    g.position.set(s.x, 0, s.z - 1.2)
+    dragonBallShop(g, signs)
     bakeInto(scene, g)
-    solid(3.3, 3.6, 3.3, s.x, 3.6, s.z)
-    pad(s)
-    title(s, 8.4, '#ff7a2a')
+    solid(3.5, 0.75, 0.75, s.x, 0.75, s.z + 0.9) // counter
+    solid(1.5, 2.2, 1.5, s.x, 2.2, s.z - 1.8) // pedestal
+    for (const [px, pz] of [[-3.7, -3.7], [3.7, -3.7], [-3.7, 1.4], [3.7, 1.4]]) solid(0.4, 3.2, 0.4, s.x + px, 3.2, s.z - 1.2 + pz)
+    // The big Dragon Ball floats over the pedestal, turning slowly (animated like the crystals).
+    const big = new Mesh(new SphereGeometry(1.9, 40, 28), new MeshPhysicalMaterial({ map: ballTexture(BALLS[1].look), roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.08 }))
+    big.position.set(s.x, 7.2, s.z - 1.8)
+    big.castShadow = true
+    scene.add(big)
+    anim.crystals.push({ mesh: big, y: 7.2 })
+    anim.sparkles.push({ x: s.x, y: 7.2, z: s.z - 1.8, sx: 2.2, sy: 2.2, sz: 2.2, color: '#ffb04a' })
+    pad(s, s.x, s.z + 4.4)
+    title(s, 10.4, '#ff9a2a')
   }
   // --- Treadmill Shop kiosk ---
   {
@@ -172,6 +183,7 @@ export function buildStalls(scene, signs, labels) {
     const sn = Math.sin(deg(-12))
     for (const [lx, ly, lz] of steam) anim.steam.push({ x: s.x + lx * c + lz * sn, y: ly, z: s.z - lx * sn + lz * c })
     title(s, 8.2, '#8f6bff', 84)
+    pad(s, s.x + Math.sin(deg(-12)) * s.padAt, s.z + Math.cos(deg(-12)) * s.padAt) // in front of the machine
   }
   extras(scene, signs, labels, anim)
   return anim
@@ -361,8 +373,8 @@ function paintWheel() {
   const c = document.createElement('canvas')
   c.width = c.height = 512
   const ctx = c.getContext('2d')
-  const colors = ['#ff3b4a', '#ff9a1f', '#ffe14a', '#4fe05a', '#2fd6ff', '#3b6bff', '#a35bff', '#ff5fb1']
-  const prizes = ['2x Money', '+5 Speed', 'Orb', 'Lucky', '$1M', 'Fighter', '3x Luck', 'Spin']
+  const prizes = SPIN.wedges.map((w) => w.label)
+  const colors = prizes.map((_, i) => SPIN.colors[i % SPIN.colors.length])
   const n = colors.length
   for (let i = 0; i < n; i++) {
     const a0 = (i / n) * Math.PI * 2
@@ -385,35 +397,61 @@ function paintWheel() {
   return c
 }
 
-// --- Orb Shop pod --------------------------------------------------------------------------
-function orbPod(g, signs) {
-  const white = M('#f4f6ff', { rough: 0.25 })
-  const navy = M('#1b2a6b', { rough: 0.4 })
-  const lamp = M('#7ae8ff', { rough: 0.2, emissive: '#3fd0ff', ei: 1.2 })
-  const shell = ball(g, white, 4, 0, 4.4, 0, 40, 28)
-  shell.scale.set(1, 0.72, 1)
-  cyl(g, navy, 4.08, 4.08, 0.9, 0, 3.95, 0, 48)
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2
-    cylC(g, lamp, 0.32, 0.32, 0.16, Math.sin(a) * 4.14, 4.4, Math.cos(a) * 4.14, 16, a, Math.PI / 2)
+// --- Dragon Ball Shop -------------------------------------------------------------------------
+// A round studded stage with an orange counter in front (sign + display balls in every colour of
+// the shop's catalog), a gold pedestal behind it that the big Dragon Ball floats over (animated
+// separately), and four orange pillars topped with gold stars.
+function starShape(r) {
+  const sh = new Shape()
+  for (let i = 0; i < 10; i++) {
+    const a = Math.PI / 2 + (i * Math.PI) / 5
+    const rr = i % 2 ? r * 0.45 : r
+    if (i) sh.lineTo(Math.cos(a) * rr, Math.sin(a) * rr)
+    else sh.moveTo(Math.cos(a) * rr, Math.sin(a) * rr)
   }
-  // Top hatch + ring.
-  cyl(g, navy, 1.2, 1.4, 0.35, 0, 7.18, 0, 28)
-  ball(g, M('#9fe3ff', { rough: 0.05, opacity: 0.6 }), 0.9, 0, 7.5, 0, 20, 12)
-  // Legs + feet.
-  for (let i = 0; i < 4; i++) {
-    const a = deg(45) + (i / 4) * Math.PI * 2
-    const cx = Math.sin(a)
-    const cz = Math.cos(a)
-    cylC(g, M('#c9cde0', { rough: 0.35, metal: 0.4 }), 0.22, 0.28, 2.6, cx * 3.6, 1.4, cz * 3.6, 12, a, deg(-28))
-    cyl(g, navy, 0.75, 0.85, 0.25, cx * 4.15, 0, cz * 4.15, 16)
+  sh.closePath()
+  return sh
+}
+function dragonBallShop(g, signs) {
+  const navy = S('#1d2a6b', { rough: 0.5 })
+  const white = S('#f4f6ff', { rough: 0.45 })
+  const orange = S('#ff8a1f', { rough: 0.45 })
+  const orangeDark = S('#e0560a', { rough: 0.5 })
+  const red = M('#e8141b', { rough: 0.4 })
+  const gold = M('#ffcc33', { rough: 0.25, metal: 0.3 })
+  // Stage: navy base, white top (smaller and higher: no shared faces).
+  cyl(g, navy, 4.7, 4.9, 0.35, 0, 0, 0, 40)
+  cyl(g, white, 4.4, 4.4, 0.2, 0, 0.35, 0, 40)
+  // Counter across the front, red stripe, white top.
+  box(g, orange, 7.0, 1.3, 1.5, 0, 0.55, 2.1)
+  box(g, red, 7.06, 0.24, 1.56, 0, 1.2, 2.1)
+  box(g, white, 7.3, 0.16, 1.8, 0, 1.85, 2.1)
+  signs.plane(g, 4.6, 0.7, 460, 70, (ctx, w, h) => strokeText(ctx, 'DRAGON BALL SHOP', w / 2, h / 2, 46, '#ffe14a', { outline: '#7a1a00', ow: 9, maxW: w - 12 }), 0, 0.9, 2.87)
+  // Display balls on little gold cups along the counter, one per catalog colour.
+  const shown = BALLS.slice(0, 6)
+  shown.forEach((b, i) => {
+    const x = -2.9 + (i * 5.8) / (shown.length - 1)
+    cyl(g, gold, 0.3, 0.22, 0.14, x, 2.01, 2.0, 14)
+    ball(g, M(b.look.base, { rough: 0.25 }), 0.36, x, 2.5, 2.0, 18, 12)
+    cylC(g, M(b.look.star, { rough: 0.4 }), 0.1, 0.1, 0.04, x, 2.52, 2.37, 5, 0, Math.PI / 2) // a star dot facing out
+  })
+  // Pedestal the big ball floats over: stepped gold + orange column with a cup on top.
+  cyl(g, orangeDark, 1.7, 1.9, 0.6, 0, 0.55, -0.6, 28)
+  cyl(g, orange, 1.1, 1.35, 3.0, 0, 1.15, -0.6, 28)
+  cyl(g, gold, 1.45, 1.2, 0.35, 0, 4.15, -0.6, 28)
+  for (let k = 0; k < 3; k++) cyl(g, red, 1.16 - k * 0.04, 1.16 - k * 0.04, 0.14, 0, 1.6 + k * 0.85, -0.6, 28) // red bands
+  // Pillars with gold stars on top.
+  const starGeo = new ExtrudeGeometry(starShape(0.55), { depth: 0.18, bevelEnabled: true, bevelSize: 0.05, bevelThickness: 0.05, bevelSegments: 1 })
+  starGeo.center()
+  for (const [x, z] of [[-3.7, -3.7], [3.7, -3.7], [-3.7, 1.4], [3.7, 1.4]]) {
+    cyl(g, orange, 0.34, 0.4, 6.0, x, 0.55, z, 16)
+    cyl(g, white, 0.48, 0.48, 0.22, x, 0.55, z, 16)
+    cyl(g, white, 0.44, 0.44, 0.22, x, 6.55, z, 16)
+    mesh(g, starGeo, gold, x, 7.45, z)
   }
-  // Door with a frame and steps down to the ground.
-  box(g, navy, 1.9, 2.5, 1.1, 0, 1.7, 3.3)
-  box(g, M('#0c1530', { rough: 0.6 }), 1.4, 2.0, 0.1, 0, 1.85, 3.86)
-  box(g, M('#ffd23a', { rough: 0.3, metal: 0.2 }), 0.12, 0.3, 0.08, 0.45, 2.7, 3.94)
-  for (let i = 0; i < 3; i++) box(g, S('#dfe6ff'), 2.2, 0.55 * (3 - i), 0.7, 0, 0, 3.9 + i * 0.7)
-  signs.plane(g, 1.8, 0.4, 216, 48, (ctx, w, h) => strokeText(ctx, 'ORB SHOP', w / 2, h / 2, 36, '#ffffff', { outline: '#0c1530', ow: 7 }), 0, 3.95, 3.88)
+  // Curved banner arch between the back pillars.
+  box(g, orangeDark, 7.8, 0.5, 0.5, 0, 6.3, -3.7)
+  box(g, red, 7.9, 0.16, 0.56, 0, 6.8, -3.7)
 }
 
 // --- Treadmill Shop kiosk ------------------------------------------------------------------
@@ -653,7 +691,7 @@ function extras(scene, signs, labels, anim) {
     labels.add(
       [
         { t: o.price, px: 48, color: '#7dff5a', outline: '#0b1a3a', ow: 10 },
-        { t: 'Orb Pack', px: 56, color: '#ff4a4a', outline: '#0b1a3a', ow: 12 },
+        { t: 'Dragon Ball Pack', px: 50, color: '#ff4a4a', outline: '#0b1a3a', ow: 12 },
         { t: 'BEST SELLING!', px: 26, color: '#ffffff', outline: '#0b1a3a', ow: 6 },
       ],
       o.x,

@@ -1,5 +1,5 @@
-import { ExtrudeGeometry, Group, Shape } from 'three'
-import { SAFE_ZONE, RARITIES } from '../config.js'
+import { Color, ExtrudeGeometry, Group, Shape } from 'three'
+import { BASE_SKINS, SAFE_ZONE, RARITIES } from '../config.js'
 import { mulberry32 } from '../textures.js'
 import { M, S, box, boxC, mesh, bakeInto, solidLocal, solidRamp, deg } from './kit.js'
 import { strokeText, roundRect, short } from './text.js'
@@ -51,7 +51,8 @@ function buildBase(scene, signs, labels, plot, index, out) {
 
   const lav = S(C.base, { rough: 0.55 })
   const lavLight = S('#e2ddff', { rough: 0.5 })
-  const trim = M(C.baseTrim, { rough: 0.3, emissive: C.baseTrim, ei: 1.3 }) // self-lit so the rims glow like neon strips
+  // Self-lit so the rims glow like neon strips. Your base gets its own instance (Base Skins recolour it).
+  const trim = M(C.baseTrim, { rough: 0.3, emissive: C.baseTrim, ei: 1.3, ...(plot.mine && { mine: 1 }) })
   const pink = S(C.pillar, { rough: 0.5 })
   const white = S(C.cap, { rough: 0.45 })
   const carpet = S(C.carpet, { rough: 0.95 })
@@ -154,7 +155,48 @@ function buildBase(scene, signs, labels, plot, index, out) {
   }
 
   buildEntrance(scene, g, signs, labels, plot, frame, out)
-  bakeInto(scene, g, true)
+  if (plot.mine) {
+    // World matrices of the two board panels (taken before baking flattens the groups).
+    g.updateMatrixWorld(true)
+    for (const k of ['upgrade', 'controls']) out.boards[k].matrix = out.boards[k].panel.matrixWorld.clone()
+  }
+  const baked = bakeInto(scene, g, true)
+  if (plot.mine) out.skin = makeSkinner(baked, trim)
+}
+
+// Base Skins: the baked base keeps each surface's colour as vertex colours, so a skin is a
+// recolour of the vertices that carry one of the Default palette's colours (floor, inset panels,
+// pillars + walls, carpet, white caps) plus the rims' own material. setSkin(skin) applies one.
+function makeSkinner(root, trim) {
+  const def = BASE_SKINS[0]
+  const roles = ['floor', 'inset', 'pillar', 'carpet', 'cap']
+  const ref = roles.map((r) => new Color(def[r]))
+  const targets = [] // { attr, lists: [indices per role] }
+  root.traverse((o) => {
+    const attr = o.isMesh && o.geometry.attributes.color
+    if (!attr) return
+    const lists = roles.map(() => [])
+    for (let i = 0; i < attr.count; i++) {
+      const r = attr.getX(i)
+      const g = attr.getY(i)
+      const b = attr.getZ(i)
+      const k = ref.findIndex((c) => Math.abs(c.r - r) + Math.abs(c.g - g) + Math.abs(c.b - b) < 1e-4)
+      if (k >= 0) lists[k].push(i)
+    }
+    if (lists.some((l) => l.length)) targets.push({ attr, lists })
+  })
+  const col = new Color()
+  return {
+    setSkin(skin) {
+      roles.forEach((role, k) => {
+        col.set(skin[role] ?? def[role])
+        for (const t of targets) for (const i of t.lists[k]) t.attr.setXYZ(i, col.r, col.g, col.b)
+      })
+      for (const t of targets) t.attr.needsUpdate = true
+      trim.color.set(skin.trim ?? def.trim)
+      trim.emissive.set(skin.trim ?? def.trim)
+    },
+  }
 }
 
 function buildSlot(g, signs, mats, sx, y, sz, side, floor, i, rand, live = false) {
@@ -240,17 +282,22 @@ function buildEntrance(scene, g, signs, labels, plot, frame, out) {
   box(head, M('#d0461b', { rough: 0.6 }), 0.5, 0.9, 1.4, 0.6, 0.9, -0.1, 0, 0, deg(-20))
   box(head, M('#1d2a44', { rough: 0.6 }), 1.8, 0.7, 1.1, 0, -0.75, -0.05)
   box(head, M('#9a4a3a'), 0.4, 0.07, 0.05, 0, 0.35, 0.72)
-  labels.add(
-    [
-      { t: `@${plot.mine ? 'You' : plot.owner}`, px: 40, color: '#ffffff' },
-      { t: `Cash Multi: x${plot.multi}`, px: 40, color: '#ffe14a' },
-    ],
-    plot.x + hx,
-    hy - 2.3,
-    B.frontZ + hz,
-    0.95,
-  )
-  if (!plot.mine) return
+  if (!plot.mine) {
+    labels.add(
+      [
+        { t: `@${plot.owner}`, px: 40, color: '#ffffff' },
+        { t: `Cash Multi: x${plot.multi}`, px: 40, color: '#ffe14a' },
+      ],
+      plot.x + hx,
+      hy - 2.3,
+      B.frontZ + hz,
+      0.95,
+    )
+    return
+  }
+  // Your base: the owner label (live Cash Multi) and both board faces are drawn by base/board.js.
+  const boards = { label: { x: plot.x + hx, y: hy - 2.3, z: B.frontZ + hz } }
+  out.boards = boards
 
   const pink = S(C.pillar, { rough: 0.5 })
   const white = S(C.cap, { rough: 0.45 })
@@ -263,7 +310,7 @@ function buildEntrance(scene, g, signs, labels, plot, frame, out) {
   const upPanel = tiltedPanel(up, 2.5)
   boxC(upPanel, pink, 6.6, 2.4, 0.4, 0, 0, 0)
   boxC(upPanel, white, 6.9, 0.2, 0.5, 0, 1.3, 0)
-  signs.plane(upPanel, 6.0, 2.0, 480, 160, paintBaseUpgrade, 0, 0, 0.23)
+  boards.upgrade = { panel: upPanel, w: 6.0, h: 2.0, z: 0.23 }
   solidLocal(frame, 6.6, 3.6, 1, 7.2, 0, -4.5)
   // Control board (right of the entrance): Auto Collect / Upgrade All / Place Best / Upgrade Max All.
   const cb = new Group()
@@ -274,7 +321,7 @@ function buildEntrance(scene, g, signs, labels, plot, frame, out) {
   const cbPanel = tiltedPanel(cb, 2.7)
   boxC(cbPanel, pink, 7.4, 2.8, 0.4, 0, 0, 0)
   boxC(cbPanel, white, 7.7, 0.2, 0.5, 0, 1.5, 0)
-  signs.plane(cbPanel, 6.9, 2.5, 552, 200, paintControls, 0, 0, 0.23)
+  boards.controls = { panel: cbPanel, w: 6.9, h: 2.5, z: 0.23 }
   solidLocal(frame, 7.4, 4, 1, -7.2, 0, -4.5)
 
   // Floating house icon over the entrance (animated by the safe zone loop).
@@ -360,69 +407,4 @@ function paintPad(ctx, w, h, cash) {
   ctx.rotate(-Math.PI / 2)
   strokeText(ctx, `$${cash}`, 0, 0, 52, '#ffffff', { outline: '#0e5a17', ow: 10, maxW: h - 16 })
   ctx.restore()
-}
-
-function paintBaseUpgrade(ctx, w, h) {
-  ctx.fillStyle = '#3c3f8f'
-  roundRect(ctx, 4, 4, w - 8, h - 8, 18)
-  ctx.fill()
-  ctx.fillStyle = '#5a5fc4'
-  roundRect(ctx, 12, 12, w - 24, h - 24, 14)
-  ctx.fill()
-  strokeText(ctx, 'Base Upgrade', w / 2, 44, 48, '#ffffff', { outline: '#1d1f5a', ow: 10 })
-  const gr = ctx.createLinearGradient(0, 84, 0, 140)
-  gr.addColorStop(0, '#5ff2ff')
-  gr.addColorStop(1, '#1fa8e8')
-  ctx.fillStyle = gr
-  roundRect(ctx, 40, 82, w - 80, 60, 14)
-  ctx.fill()
-  // House glyph.
-  ctx.fillStyle = '#ff4b3a'
-  ctx.beginPath()
-  ctx.moveTo(78, 92)
-  ctx.lineTo(102, 112)
-  ctx.lineTo(96, 112)
-  ctx.lineTo(96, 132)
-  ctx.lineTo(60, 132)
-  ctx.lineTo(60, 112)
-  ctx.lineTo(54, 112)
-  ctx.closePath()
-  ctx.fill()
-  const { price, progress } = B.upgrade
-  strokeText(ctx, price, w / 2 + 10, 104, 34, '#ffffff', { outline: '#0b4a7a', ow: 8 })
-  strokeText(ctx, progress, w / 2 + 10, 131, 20, '#ffffff', { outline: '#0b4a7a', ow: 5 })
-}
-
-function paintControls(ctx, w, h) {
-  ctx.fillStyle = '#3c3f8f'
-  roundRect(ctx, 4, 4, w - 8, h - 8, 18)
-  ctx.fill()
-  const btn = (x, y, bw, bh, top, bot, text, locked) => {
-    const gr = ctx.createLinearGradient(0, y, 0, y + bh)
-    gr.addColorStop(0, top)
-    gr.addColorStop(1, bot)
-    ctx.fillStyle = gr
-    roundRect(ctx, x, y, bw, bh, 14)
-    ctx.fill()
-    ctx.lineWidth = 4
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)'
-    ctx.stroke()
-    strokeText(ctx, text, x + bw / 2 + (locked ? 10 : 0), y + bh / 2, 26, '#ffffff', { outline: 'rgba(0,0,0,0.55)', ow: 6, maxW: bw - 30 })
-    if (locked) {
-      ctx.fillStyle = '#ffb21f'
-      roundRect(ctx, x + 14, y + bh / 2 - 6, 26, 22, 4)
-      ctx.fill()
-      ctx.strokeStyle = '#ffb21f'
-      ctx.lineWidth = 5
-      ctx.beginPath()
-      ctx.arc(x + 27, y + bh / 2 - 6, 9, Math.PI, 0)
-      ctx.stroke()
-    }
-  }
-  const bw = (w - 48) / 2
-  const bh = (h - 48) / 2
-  btn(16, 16, bw, bh, '#4b5a78', '#2c3550', 'AUTO COLLECT', true)
-  btn(32 + bw, 16, bw, bh, '#ffe14a', '#f2a21a', 'UPGRADE ALL', false)
-  btn(16, 32 + bh, bw, bh, '#5ae36a', '#24a53a', 'PLACE BEST', false)
-  btn(32 + bw, 32 + bh, bw, bh, '#a35bff', '#6a2fd6', 'UPGRADE MAX ALL', false)
 }

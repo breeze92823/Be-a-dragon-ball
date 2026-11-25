@@ -6,6 +6,7 @@ import { neon } from '../propkit.js'
 import { M, S, box, cyl, cone, ball, mesh, bakeInto, solid, deg } from '../safezone/kit.js'
 import { SignAtlas, DynLabel, strokeText, short } from '../safezone/text.js'
 import { buildHouse } from './house.js'
+import { dressDesert, zoneExtras } from './desert.js'
 
 // The lane north of the safe zone (map: LANE.md). Zone 0 (Common) is the
 // desert the safe zone already built; zones 1..11 are walled corridors, each
@@ -88,9 +89,15 @@ function buildZone(scene, signs, zone, i) {
   const frame = { x: houseX, z: houseZ, yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2 }
   const front = Math.abs(houseX) - 5.5 - 1.4 // |x| of the step's outer edge
   const house = buildHouse(scene, signs, zone, frame, front - 3.6)
+  emitters.push(...house.emitters)
 
-  // Scenery.
-  if (i > 0) dressZone(g, zone, rand, { start, end, halfW, house: { x: houseX, z: houseZ }, emitters, scene })
+  // Scenery (the desert's ground, pyramids and cacti come from safezone/ground.js; desert.js adds
+  // its obelisks, oasis, mounds and the moving tumbleweeds, vultures and dust devils).
+  let live = null
+  if (i > 0) {
+    dressZone(g, zone, rand, { start, end, halfW, house: { x: houseX, z: houseZ }, emitters, scene })
+    zoneExtras(scene, zone, { start, end, halfW }, emitters)
+  } else live = dressDesert(g, scene, emitters)
 
   // Floating zone sign over the lane.
   const label = new DynLabel(900, 220, 5.2, (ctx, w, h) => paintZoneSign(ctx, w, h, zone))
@@ -99,7 +106,7 @@ function buildZone(scene, signs, zone, i) {
   scene.add(label.sprite)
 
   const baked = bakeInto(scene, g, true)
-  return { index: i, zone, start, end, mid, house, baked, label: label.sprite, emitters }
+  return { index: i, zone, start, end, mid, house, baked, label: label.sprite, emitters, live: live?.group ?? null, update: live?.update ?? null }
 }
 
 // "<Zone> Zone" + "Recommended : <shoe> 2.7K Speed".

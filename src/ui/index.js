@@ -1,10 +1,11 @@
 import './ui.css'
+import './shops.css'
 import { BOOSTS } from '../config.js'
 import { changed, luckBoosted, onGameEvent, speedBoosted, state } from '../state.js'
 import { OVERHEAD_LAYER } from '../safezone/text.js'
 import { toast } from '../toast.js'
 import { sfx } from '../audio/index.js'
-import { button, clock, el, money, openWindow, toggleWindow } from './shell.js'
+import { button, clock, closeWindow, el, isOpen, money, openWindow, toggleWindow } from './shell.js'
 import { createPortraits } from './portrait.js'
 import { pollServer, questEvent, view } from './server.js'
 import { discover, ICON } from './rewards.js'
@@ -14,14 +15,21 @@ import { createRebirth, cashNeeded } from './rebirth.js'
 import { createQuests, questsReady } from './quests.js'
 import { CALENDAR, createDaily, dailyReady } from './daily.js'
 import { createSettings, GEAR } from './settings.js'
+import { createFuse } from './fuse.js'
+import { createSkins } from './skins.js'
+import { createBallShop, createTreadmillShop } from './shops.js'
+import { createSpin } from './spin.js'
+import { createSell } from './sell.js'
 
 // The windows (src/ui/): Playtime Rewards, Index, Rebirth, Daily Quests, Daily Rewards and
 // Settings, opened from the HUD's menu grid (hud.onMenu) and two corner buttons (calendar, gear);
 // the x2 Speed button on the left edge and the x2 Luck badge. Also: Index discoveries (every
 // fighter you own or hatch), Daily Quests events, the red "!" alerts and total playtime.
 // Rules that need a trusted clock (playtime, daily, quests) run on the server: ui/server.js.
+// The shop row's machines open when you step on their pads (safeZone.onShop): Fuse Machine,
+// Base Skins, Treadmills Shop, Dragon Ball Shop, Dragon Spin, and the Sell stall's dialog.
 
-export function initUi({ hud, renderer, camera, applySetting, portalQuality }) {
+export function initUi({ hud, renderer, camera, applySetting, portalQuality, safeZone }) {
   camera.layers.enable(OVERHEAD_LAYER)
   const portraits = createPortraits(renderer)
   const ctx = { hud, portraits }
@@ -32,7 +40,27 @@ export function initUi({ hud, renderer, camera, applySetting, portalQuality }) {
     createQuests(ctx),
     createDaily(ctx),
     createSettings({ camera, applySetting, portalQuality }),
+    createFuse(ctx),
+    createSkins({ safeZone }),
+    createTreadmillShop(ctx),
+    createBallShop(ctx),
+    createSpin(ctx),
   ]
+  const sell = createSell(ctx)
+  parts.push(sell)
+
+  // Shop pads -> windows (true = handled, so the pad shows no plain notice).
+  const PAD_WINDOWS = { fuse: 'fuse', skins: 'skins', treadmill: 'treadmills', balls: 'balls', spin: 'spin' }
+  if (safeZone) {
+    safeZone.onShop = (id, on) => {
+      if (id === 'sell') return sell.show(on), true
+      const win = PAD_WINDOWS[id]
+      if (!win) return false
+      if (on) openWindow(win)
+      else if (isOpen(win)) closeWindow()
+      return true
+    }
+  }
   const [playtime] = parts
 
   hud.onMenu('index', () => openWindow('index'))

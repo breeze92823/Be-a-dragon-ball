@@ -8,10 +8,12 @@ import {
   DynamicDrawUsage,
   InstancedBufferAttribute,
   InstancedMesh,
+  Mesh,
   MeshBasicMaterial,
   NormalBlending,
   Object3D,
   PlaneGeometry,
+  RingGeometry,
   Points,
   ShaderMaterial,
   SRGBColorSpace,
@@ -265,18 +267,64 @@ class Confetti {
   }
 }
 
+// --- Shock rings: a few pooled additive ring meshes (hidden while idle, so they cost nothing) --
+class Rings {
+  constructor(scene, max) {
+    const geo = new RingGeometry(0.72, 1, 40)
+    this.items = []
+    for (let i = 0; i < max; i++) {
+      const m = new Mesh(geo, new MeshBasicMaterial({ transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, side: DoubleSide, toneMapped: false }))
+      m.visible = false
+      m.frustumCulled = false
+      m.renderOrder = 4
+      scene.add(m)
+      this.items.push({ m, age: 0, life: 1, r: 1 })
+    }
+    this.next = 0
+  }
+  spawn(x, y, z, color, r, life, vertical) {
+    const it = this.items[this.next]
+    this.next = (this.next + 1) % this.items.length
+    it.age = 0
+    it.life = life
+    it.r = r
+    it.m.position.set(x, y, z)
+    it.m.rotation.set(-Math.PI / 2 + (vertical ? 0.35 : 0), 0, 0) // a halo burst round the head tilts a little
+    it.m.material.color.set(color).multiplyScalar(1.6)
+    it.m.visible = true
+  }
+  update(dt) {
+    for (const it of this.items) {
+      if (!it.m.visible) continue
+      it.age += dt
+      const t = it.age / it.life
+      if (t >= 1) {
+        it.m.visible = false
+        continue
+      }
+      const e = 1 - (1 - t) * (1 - t) * (1 - t)
+      it.m.scale.setScalar(0.3 + it.r * e)
+      it.m.material.opacity = (1 - t) * (1 - t) * 0.9
+    }
+  }
+}
+
 let glowPool = null // additive sparkles / light
 let smokePool = null // normal-blended smoke, dust, dark vortex
 let confetti = null
+let rings = null
 
 export function installFx(scene) {
   glowPool = new Pool(scene, 1400, { additive: true, sprite: 'sparkle', boost: 2.2 })
   smokePool = new Pool(scene, 1400, { additive: false, sprite: 'dot' })
   confetti = new Confetti(scene, 420)
+  rings = new Rings(scene, 10)
 }
 
 export const glow = (o) => glowPool?.spawn(o)
 export const smoke = (o) => smokePool?.spawn(o)
+// A ring of light expanding flat over the ground (a stomp, a roar) or facing up (vertical).
+export const shockwave = (x, y, z, color = '#ffffff', radius = 4, life = 0.6, vertical = false) => rings?.spawn(x, y, z, color, radius, life, vertical)
 export const confettiBurst = (x, y, z, n, power) => confetti?.burst(x, y, z, n, power)
 
 export function updateFx(dt, viewportHeight) {
@@ -284,6 +332,7 @@ export function updateFx(dt, viewportHeight) {
   glowPool?.update(dt)
   smokePool?.update(dt)
   confetti?.update(dt)
+  rings?.update(dt)
 }
 
 // --- Ready-made bursts ---------------------------------------------------------------------

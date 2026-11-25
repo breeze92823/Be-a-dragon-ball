@@ -37,11 +37,11 @@ export const SAFE_ZONE = {
   shops: [
     { id: 'sell', title: 'Sell', x: -50, z: -31, pad: '#ff5fb1', r: 3.2, note: 'Sell your fighters here' },
     { id: 'spin', title: 'Dragon Spin', x: -37, z: -31, pad: '#7dff5a', r: 4.6, note: 'Free spin every 15 minutes' },
-    { id: 'orbs', title: 'Orb Shop', x: -23, z: -31, pad: '#ffe14a', r: 5, note: 'Orb Shop opens soon' },
-    { id: 'treadmill', title: 'Treadmill Shop', x: 17, z: -31, pad: '#33f1ff', r: 4.2, note: 'Treadmill Shop opens soon' },
+    { id: 'balls', title: 'Dragon Ball Shop', x: -23, z: -31, pad: '#ff9a2a', r: 3.4, note: 'Buy Dragon Balls for more luck' },
+    { id: 'treadmill', title: 'Treadmill Shop', x: 17, z: -31, pad: '#33f1ff', r: 4.2, note: 'Faster treadmills, more Speed' },
     { id: 'cash', title: 'Cash Shop', x: 29, z: -31, pad: '#b44dff', r: 5, note: 'Everything here costs $ only' },
     { id: 'skins', title: 'Base Skins', x: 40.5, z: -31, pad: '#d8ff4a', r: 3.6, note: 'Equip base skins here' },
-    { id: 'fuse', title: 'Fuse Machine', x: 50, z: -30, pad: '#8f6bff', r: 0, note: 'Fuse 3 fighters into a stronger one' },
+    { id: 'fuse', title: 'Fuse Machine', x: 50, z: -30, pad: '#8f6bff', r: 3, padAt: 6.2, note: 'Fuse 4 fighters into a stronger one' }, // padAt: m in front of the machine
   ],
   // Boards on the side walls (side: 1 = east wall facing west, -1 = west wall facing east).
   boards: [
@@ -71,7 +71,6 @@ export const SAFE_ZONE = {
       { x: 28.5, level: 3, owner: 'PixelMonk', multi: 2 },
       { x: 47.5, level: 0 },
     ],
-    upgrade: { price: '$500K', progress: '0/5' },
   },
 }
 // Fighter rarities: label colour, income range (per second) and whether they get an aura.
@@ -112,11 +111,14 @@ export const LANE = {
     slowChase: 1.6, // x the orb's top speed when the orb is too slow (it gets caught)
     fastChase: 0.82, // x the orb's top speed when the orb is fast enough (it escapes)
     huntSpeed: 11, // m/s chasing a hatched fighter (the fighter runs at 14)
-    angryTime: 1.8, // s of rage on the slot before the hunt starts (the fighter's head start)
+    angryTime: 0.9, // s of stamping rage after it wakes, before the hunt starts
+    wakeDelay: 3, // s it sleeps on after the fighter hatched (the head start)
+    rouseTime: 2.2, // s to stir, notice ("!"), stand up and roar
     walkSpeed: 6.5, // m/s carrying / going home
     leash: 16, // m past its zone's ends it keeps chasing
   },
   luckMax: 0.5, // luck multiplier grows from x1.0 at a zone's start to x1.5 at its end
+  wrongWayTime: 5, // s of running away from the safe zone while hunted before the tongue gets you
   hatchTime: 1.9, // s from the orb touching the slot to the fighter appearing
   mutationChance: 0.12,
   hotbarSlots: 10, // keys 1-9 then 0 (the rest go to the Backpack)
@@ -133,6 +135,18 @@ export const BASE = {
   upgradeGrowth: 1.8,
   levelIncome: 0.5, // + this share of base income per level above 1
   cashMulti: 1, // the base's cash multiplier (rebirths raise it later)
+}
+
+// Your base's entrance boards (base/board.js): the control board's four buttons and the Base
+// Upgrade sign are clicked with the free mouse cursor (Esc releases it) or tapped on touch.
+// Everything is bought with $ (never premium currency).
+export const BASE_BOARD = {
+  reach: 34, // m from the player to a board at which its buttons react
+  autoCollect: { price: 250e3, interval: 1 }, // one-time unlock, then an ON/OFF toggle; s between sweeps
+  upgradeMax: { price: 3e6 }, // one-time unlock of Upgrade Max All
+  maxUpgrades: 2000, // safety cap on upgrades bought by one Upgrade Max All click
+  // Base Upgrade: 5 steps, each adds multiStep to the base's Cash Multi (x1 -> x3.5).
+  upgrade: { prices: [500e3, 3e6, 20e6, 150e6, 1.2e9], multiStep: 0.5 },
 }
 
 // Bar: [a, b] colours of the zone's segment on the top progress bar (or 'rainbow').
@@ -328,6 +342,9 @@ export const AUDIO = {
   // Spin ticks (level + distance in m at which they are at half level), footstep stride (m).
   ambience: { wind: 0.16, hum: 0.22, humNear: 9, tick: 0.5, tickNear: 10, fountain: 0.05 },
   footstepStride: 1.35,
+  // Background music (audio/music.js): bus level, bus lowpass (Hz: keeps it warm, never shrill),
+  // polyphony cap, tempo per mood (bpm) and a level trim per mood.
+  music: { level: 0.32, lowpass: 2600, maxVoices: 26, tempo: { safe: 76, lane: 92, hatch: 60, chase: 128 }, moodLevel: { safe: 0.9, lane: 1, hatch: 0.8, chase: 1 } },
 }
 
 // --- Bloxity (bloxity.js, avatar/) -------------------------------------------------
@@ -458,10 +475,23 @@ export const NET = {
 // and you run on it, gaining Speed every `every` s (TAP!! adds `tap` x the gain per tap).
 export const TREADMILL = {
   gain: 100, // Speed per stride tick
-  every: 0.55, // s between ticks
+  every: 2, // s between Speed gains (the cooldown on each +100)
   critChance: 0.07, // chance a tick is a power stride
   critMulti: 10, // x gain on a power stride (+1000)
-  tapMulti: 2, // TAP!! bonus: a tap gives gain x tapMulti
+  // TAP!! bubble: pops up near the runner at random moments, stays `life` s (a draining ring),
+  // then disappears. While it is up every tap gives gain x its multiplier. The multiplier is
+  // rolled per bubble by weight, so x2 is common and x5 is rare.
+  tap: {
+    life: 5, // s the bubble stays
+    first: [1.5, 3], // s from starting the treadmill to the first bubble
+    gap: [5, 12], // s of quiet between one bubble going and the next showing
+    tiers: [
+      { m: 2, w: 60 },
+      { m: 3, w: 25 },
+      { m: 4, w: 11 },
+      { m: 5, w: 4 },
+    ],
+  },
   tapCooldown: 0.12, // s between counted taps
   runSpeed: 12.5, // m/s the legs animate at (belt speed)
   beltSpeed: 3.2, // belt texture repeats per s
@@ -507,6 +537,7 @@ export const REBIRTH = {
 export const BOOSTS = {
   speed: { multi: 2, minutes: 15, price: 0.1, minPrice: 50000 },
   luck: { multi: 2 },
+  money: { multi: 2 }, // x2 Money (a Dragon Spin prize): base income
 }
 
 // Playtime Rewards: unlocks = seconds online today (backend PLAYTIME_UNLOCKS, same length).
@@ -558,3 +589,103 @@ export const QUESTS = {
 
 // Settings window defaults (saved with the progress).
 export const GAME_SETTINGS = { lowGfx: false, noVfx: false, muteMusic: false, names: true }
+
+// --- Shops + machines in the safe zone (src/ui/ shop windows, opened by stepping on a pad) ------
+// Everything here is bought with $ only (never premium currency).
+
+// Fuse Machine (ui/fuse.js; backend fuse.ts FUSE_* must match): FUSE.inputs fighters go in, one
+// comes out after a timer. Result tier = the inputs' average rarity (rounded) + a step rolled by
+// weight, capped at the top rarity; a mutation with mutationChance (four alike pass theirs on).
+// Timer = seconds[0] + seconds[1] x the base tier.
+export const FUSE = {
+  inputs: 4,
+  steps: [
+    { step: 0, weight: 60 },
+    { step: 1, weight: 32 },
+    { step: 2, weight: 8 },
+  ],
+  mutationChance: 0.25,
+  seconds: [20, 20],
+}
+
+// Base Skins (ui/skins.js): Default + one per mutation, unlocked in the Index (INDEX.rewardAt of
+// that mutation -> state.indexClaimed). The colours repaint your base: floor slab, inset panels,
+// pillars + walls, carpet, the glowing rims and the white caps.
+export const BASE_SKINS = [
+  { id: '', name: 'Default', floor: '#cfc8f2', inset: '#e2ddff', pillar: '#ff8cc6', carpet: '#e3141b', trim: '#1fe6ff', cap: '#ffffff' },
+  { id: 'golden', name: 'Golden', floor: '#ffe58a', inset: '#fff3c4', pillar: '#e8b820', carpet: '#b8780b', trim: '#fff27a', cap: '#fffbe8' },
+  { id: 'ice', name: 'Ice', floor: '#d8f6ff', inset: '#f0fcff', pillar: '#7fd8f0', carpet: '#2f9be0', trim: '#bff8ff', cap: '#ffffff' },
+  { id: 'shadow', name: 'Shadow', floor: '#6a4aa8', inset: '#8a6ac8', pillar: '#3a1a6a', carpet: '#1a0a3a', trim: '#b48cff', cap: '#d8c8ff' },
+  { id: 'jade', name: 'Jade', floor: '#9ae68a', inset: '#c8ffb8', pillar: '#2f9a3a', carpet: '#1f6a2a', trim: '#8dff5a', cap: '#eaffe0' },
+  { id: 'candy', name: 'Candy', floor: '#ffd0f0', inset: '#ffe8f8', pillar: '#ff7ac8', carpet: '#ff3a9a', trim: '#ffb0e8', cap: '#ffffff' },
+  { id: 'lava', name: 'Lava', floor: '#5a3a30', inset: '#7a4a38', pillar: '#ff6a1a', carpet: '#2a1410', trim: '#ffb04a', cap: '#ffd08a' },
+  { id: 'crimson', name: 'Crimson', floor: '#e8a0a0', inset: '#f8c8c8', pillar: '#c4141b', carpet: '#6a0a10', trim: '#ff4a4a', cap: '#ffe0e0' },
+  { id: 'lightning', name: 'Lightning', floor: '#e8f4ff', inset: '#ffffff', pillar: '#5ab8ff', carpet: '#1a3a8a', trim: '#bfeaff', cap: '#fff27a' },
+  { id: 'destruction', name: 'Destruction', floor: '#4a2a7a', inset: '#6a3aa0', pillar: '#2a0a5a', carpet: '#9a5aff', trim: '#d07aff', cap: '#c8a8ff' },
+  { id: 'mastered', name: 'Mastered Aura', floor: '#f0f2ff', inset: '#ffffff', pillar: '#c8c8e8', carpet: '#8a8ab0', trim: '#e8ecff', cap: '#ffffff' },
+]
+
+// Treadmill Shop (ui/treadmills.js): the equipped treadmill sets the Speed gained per stride
+// (the starter's gain is TREADMILL.gain) and the machine's colours. Prices in $; bg = card gradient.
+export const TREADMILLS = [
+  { id: '', name: 'Training Treadmill', gain: 100, price: 0, colors: { body: '#c9b8ff', bodyDark: '#a493e8', trim: '#6f5bd6', neon: '#57f0ff' }, bg: ['#dfe3ee', '#9aa2b8'] },
+  { id: 'meadow', name: 'Meadow Treadmill', gain: 250, price: 25e3, colors: { body: '#7ee06a', bodyDark: '#3fae3a', trim: '#1f7a2a', neon: '#c8ff5a' }, bg: ['#c8ffb0', '#5fcf4a'] },
+  { id: 'grape', name: 'Grape Treadmill', gain: 500, price: 5e5, colors: { body: '#c86aff', bodyDark: '#9a3ae8', trim: '#5a1aa8', neon: '#ff7af0' }, bg: ['#ecb8ff', '#a84ae8'] },
+  { id: 'sunrise', name: 'Sunrise Treadmill', gain: 1000, price: 6e6, colors: { body: '#ffc84a', bodyDark: '#f09a1a', trim: '#b8600a', neon: '#fff27a' }, bg: ['#fff0b0', '#ffb84a'] },
+  { id: 'coral', name: 'Coral Treadmill', gain: 2500, price: 9e7, colors: { body: '#ff8a7a', bodyDark: '#e85a4a', trim: '#a82a2a', neon: '#ffd0a0' }, bg: ['#ffd0c8', '#ff7a6a'] },
+  { id: 'frost', name: 'Frostbite Treadmill', gain: 6000, price: 1e9, colors: { body: '#bff0ff', bodyDark: '#7fc8f0', trim: '#2f7fd8', neon: '#e8ffff' }, bg: ['#e8fbff', '#7fd0f0'] },
+  { id: 'gilded', name: 'Gilded Treadmill', gain: 15000, price: 2.4e9, colors: { body: '#ffe27a', bodyDark: '#d8a81f', trim: '#8a6a0a', neon: '#fff8c0' }, bg: ['#fff4b8', '#e8b820'] },
+  { id: 'candy', name: 'Candy Treadmill', gain: 1e5, price: 1.4e10, colors: { body: '#ffb0e0', bodyDark: '#ff7ac8', trim: '#e83a9a', neon: '#ffffff' }, bg: ['#ffe0f4', '#ff8ad0'] },
+  { id: 'inferno', name: 'Inferno Treadmill', gain: 4e5, price: 8e10, colors: { body: '#ff4a3a', bodyDark: '#c41a1a', trim: '#6a0a0a', neon: '#ffb04a' }, bg: ['#ff9a8a', '#d8202a'] },
+  { id: 'cloud', name: 'Cloud Rider Treadmill', gain: 7e5, price: 8e11, colors: { body: '#fff4c0', bodyDark: '#ffd86a', trim: '#4ab8ff', neon: '#bfeaff' }, bg: ['#fffbe0', '#ffe27a'] },
+  { id: 'thunder', name: 'Thunder Treadmill', gain: 1.2e6, price: 9e12, colors: { body: '#5a7aff', bodyDark: '#2a3ad8', trim: '#fff27a', neon: '#fff27a' }, bg: ['#b8c8ff', '#3a5ae8'] },
+  { id: 'abyss', name: 'Abyss Treadmill', gain: 2e6, price: 9.5e13, colors: { body: '#1f6a8a', bodyDark: '#0f3a5a', trim: '#2affd8', neon: '#2affd8' }, bg: ['#8ad8e8', '#1f6a8a'] },
+  { id: 'ravager', name: 'Ravager Treadmill', gain: 3.5e6, price: 8e14, colors: { body: '#6a3ab8', bodyDark: '#2a1a5a', trim: '#ff3af0', neon: '#ff7af0' }, bg: ['#c8a8ff', '#4a2a8a'] },
+  { id: 'divine', name: 'Divine Treadmill', gain: 6e6, price: 8e15, colors: { body: '#ff6a7a', bodyDark: '#c4203a', trim: '#ffd23a', neon: '#ffe14a' }, bg: ['#ffb0b8', '#c4303a'] },
+  { id: 'elixir', name: 'Elixir Treadmill', gain: 1e7, price: 8e16, colors: { body: '#3a5a4a', bodyDark: '#1f3a2a', trim: '#8dff5a', neon: '#8dff5a' }, bg: ['#a8d8b8', '#2f6a4a'] },
+  { id: 'cosmic', name: 'Cosmic Treadmill', gain: 1.8e7, price: 9e17, colors: { body: '#2a2a6a', bodyDark: '#14143a', trim: '#7af0ff', neon: '#c8a8ff' }, bg: ['#9a9af0', '#2a2a7a'] },
+  { id: 'primal', name: 'Primal Treadmill', gain: 3e7, price: 1e19, colors: { body: '#9cff4a', bodyDark: '#5aa82a', trim: '#ffd23a', neon: '#ffffff' }, bg: ['#e0ffb8', '#7ad83a'] },
+]
+
+// Dragon Ball Shop (ui/balls.js): the equipped Dragon Ball is the ball you roll down the lane as,
+// and multiplies your luck (mutation odds + hatch quality). Prices in $.
+// look: base colour, shade, star colour, star count, optional pattern ('grid' | 'crack' | 'wings').
+export const BALLS = [
+  { id: '', name: 'Starter Dragon Ball', rarity: 'Common', luck: 1, price: 0, look: { base: '#5a5e6a', dark: '#24262e', star: '#ffffff', stars: 3 } },
+  { id: 'lucky', name: 'Lucky Dragon Ball', rarity: 'Uncommon', luck: 2, price: 2.5e5, look: { base: '#ffa040', dark: '#e0560a', star: '#e8141b', stars: 3 } },
+  { id: 'circuit', name: 'Circuit Dragon Ball', rarity: 'Rare', luck: 3, price: 8e6, look: { base: '#1f5a2a', dark: '#0a2a12', star: '#5aff6a', stars: 4, pattern: 'grid' } },
+  { id: 'ember', name: 'Ember Dragon Ball', rarity: 'Epic', luck: 4, price: 3e8, look: { base: '#ff5a2a', dark: '#8a1a0a', star: '#ffe14a', stars: 4, pattern: 'crack' } },
+  { id: 'frost', name: 'Frost Dragon Ball', rarity: 'Legendary', luck: 5, price: 1.2e10, look: { base: '#bff0ff', dark: '#4ab8e8', star: '#1f5ad8', stars: 5 } },
+  { id: 'storm', name: 'Storm Dragon Ball', rarity: 'Mythical', luck: 6, price: 5e11, look: { base: '#6a7aff', dark: '#1a1f8a', star: '#fff27a', stars: 5, pattern: 'crack' } },
+  { id: 'void', name: 'Void Dragon Ball', rarity: 'Secret', luck: 7, price: 2.5e13, look: { base: '#3a2a4a', dark: '#08040e', star: '#ff3af0', stars: 6 } },
+  { id: 'chrome', name: 'Chrome Dragon Ball', rarity: 'Eternal', luck: 8, price: 2.5e16, look: { base: '#e8ecf4', dark: '#7a8098', star: '#e8141b', stars: 6, pattern: 'crack' } },
+  { id: 'serpent', name: 'Serpent Dragon Ball', rarity: 'Heavenly', luck: 10, price: 5e17, look: { base: '#3a8a4a', dark: '#0f3a1a', star: '#ff2a2a', stars: 3, pattern: 'crack' } },
+  { id: 'angelic', name: 'Angelic Dragon Ball', rarity: 'Celestial', luck: 11, price: 1e19, look: { base: '#ffffff', dark: '#c8d4ff', star: '#8aa8ff', stars: 7, pattern: 'wings' } },
+]
+
+// Dragon Spin (ui/spin.js; backend spin.ts SPIN_WEDGES: same ids, order and weights). One free spin
+// every everyMs (server clock); packs of extra spins are sold for $ (price = share x the current
+// rebirth cash requirement, at least min). prize: a ui/rewards.js reward.
+export const SPIN = {
+  wedges: [
+    { id: 'cash', label: '$100K', weight: 30, prize: { cash: 100000 } },
+    { id: 'luck', label: '2x Luck', weight: 10, prize: { boost: 'luck', minutes: 10, label: 'x2 Luck (10 Mins)' } },
+    { id: 'epicFighter', label: 'Epic Fighter', weight: 5, prize: { fighter: 'Epic', pick: 3 } },
+    { id: 'speed', label: '2x Speed', weight: 20, prize: { boost: 'speed', minutes: 10, label: 'x2 Speed (10 Mins)' } },
+    { id: 'rareFighter', label: 'Rare Fighter', weight: 15, prize: { fighter: 'Rare', pick: 7 } },
+    { id: 'money', label: '2x Money', weight: 20, prize: { boost: 'money', minutes: 10, label: 'x2 Money (10 Mins)' } },
+  ],
+  colors: ['#2f8a3a', '#1f6a2a'], // alternating wedge colours
+  everyMs: 15 * 60 * 1000, // backend SPIN_EVERY_MS
+  cap: 5,
+  start: 1,
+  packs: [
+    { spins: 3, share: 0.04, min: 150000 },
+    { spins: 6, share: 0.06, min: 250000, tag: 'MEGA DEAL' },
+  ],
+  turns: 5, // full turns before the wheel settles
+  time: 4.2, // s the spin animation takes
+}
+
+// Sell stall (ui/sell.js): a fighter sells for income x seconds x the money multiplier.
+export const SELL = { seconds: 30 }

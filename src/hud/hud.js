@@ -226,6 +226,7 @@ export function createHud({ renderer, onTeleport }) {
   let runOn = false
   let hatchTimer = 0
   let heartIn = 0
+  let dangerK = 0
   const v = new Vector3()
 
   function rect(e) {
@@ -291,6 +292,12 @@ export function createHud({ renderer, onTeleport }) {
       const m = short(max)
       if (spMax.textContent !== m) spMax.textContent = m
     },
+    // 0..1 how close a chasing guardian is: vignette strength + heartbeat rate.
+    danger(k) {
+      dangerK = k
+      root.style.setProperty('--danger', k.toFixed(3))
+      root.classList.toggle('chased', k > 0.05)
+    },
     run(on) {
       runOn = on
       root.classList.toggle('running', on)
@@ -333,11 +340,11 @@ export function createHud({ renderer, onTeleport }) {
         hatchTimer -= dt
         if (hatchTimer <= 0) root.classList.remove('hatch-show')
       }
-      if (runOn) {
+      if (runOn || dangerK > 0.3) {
         heartIn -= dt
         if (heartIn <= 0) {
-          heartIn = 0.75
-          sfx.heartbeat(0.7)
+          heartIn = 0.85 - dangerK * 0.45 // faster as it closes in
+          sfx.heartbeat(0.5 + dangerK * 0.5)
         }
       }
 

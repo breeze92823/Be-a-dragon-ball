@@ -8,7 +8,7 @@ import { player, placePlayer, resetPlayer, setFrozen, isFrozen } from './player.
 import { syncYawToPlayer } from './camera.js'
 import { inputState, onKey } from './input.js'
 import { segmentClear } from './physics.js'
-import { addSpeed, state } from './state.js'
+import { addSpeed, equippedTreadmill, state } from './state.js'
 import { flash, glow, puff, smoke } from './fx.js'
 import { toast } from './toast.js'
 import * as snd from './audio/treadmill.js'
@@ -28,7 +28,8 @@ import * as snd from './audio/treadmill.js'
 // along the belt, so the animator runs, the footsteps play and the camera's speed framing
 // kicks in, without the body going anywhere.
 
-const C = T.colors
+// Colours: the equipped treadmill's (Treadmill Shop) over TREADMILL.colors; buildModel() reads C.
+let C = { ...T.colors }
 const D = T.deckHeight
 const HUB = SAFE_ZONE.hub
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v)
@@ -158,6 +159,7 @@ function makeScreen() {
 // --- Model ---------------------------------------------------------------------------------
 // Local frame: +Z = forward (the console), the belt top moves toward -Z. Feet at y = D.
 function buildModel() {
+  C = { ...T.colors, ...equippedTreadmill().colors }
   const root = new Group()
   const frame = new Group()
   const body = S(C.body, { rough: 0.45 })
@@ -278,7 +280,7 @@ function makeOverlay() {
   tapBtn.type = 'button'
   tapBtn.className = 'tm-tap'
   tapBtn.setAttribute('aria-label', 'Tap to train faster')
-  tapBtn.innerHTML = `<span class="tm-tap-ring"></span><span class="tm-tap-hand">${HAND_SVG}</span><span class="tm-tap-text">TAP!!</span><span class="tm-tap-x">x${T.tapMulti}</span>`
+  tapBtn.innerHTML = `<span class="tm-tap-timer"></span><span class="tm-tap-ring"></span><span class="tm-tap-hand">${HAND_SVG}</span><span class="tm-tap-text">TAP!!</span><span class="tm-tap-x">x2</span>`
   layer.appendChild(tapBtn)
 
   const pool = []
@@ -296,7 +298,8 @@ function makeOverlay() {
 
 // --- The system ------------------------------------------------------------------------------
 export function createTreadmill(scene, { hud, camera, renderer }) {
-  const m = buildModel()
+  let m = buildModel()
+  let built = equippedTreadmill().id
   const overlay = makeOverlay()
   const canvas = renderer?.domElement ?? null
 
@@ -312,13 +315,48 @@ export function createTreadmill(scene, { hud, camera, renderer }) {
   let armed = false // move keys were released after starting (holding W does not throw you off at once)
   let motor = null
   let streakT = 0
+  // TAP!! bubble: hidden until a random moment, then up for T.tap.life s.
+  let tapOn = false
+  let tapLeft = 0
+  let tapMult = 2
+  let tapGap = 0 // s until the next bubble shows
+  const tapOff = { x: 0, y: 0 } // where it floats relative to the runner (px), rolled per bubble
+  const tapX = overlay.tapBtn.querySelector('.tm-tap-x')
   const at = { x: 0, y: 0, z: 0, yaw: 0, fx: 0, fz: 1, rx: 1, rz: 0 }
   const head = new Vector3()
   const tmp = new Vector3()
 
   const setActive = (on) => {
     document.querySelector('.hud-mb-treadmill')?.classList.toggle('tm-active', on) // the HUD's menu button glows
-    overlay.tapBtn.classList.toggle('on', on)
+  }
+
+  const range = ([a, b]) => a + Math.random() * (b - a)
+  // Weighted pick: higher multipliers have a small weight, so they are rare.
+  function rollTier() {
+    const tiers = T.tap.tiers
+    let r = Math.random() * tiers.reduce((n, t) => n + t.w, 0)
+    for (const t of tiers) if ((r -= t.w) < 0) return t.m
+    return tiers[0].m
+  }
+  function showTap() {
+    tapMult = rollTier()
+    tapOn = true
+    tapLeft = T.tap.life
+    tapOff.x = R(-45, 45)
+    tapOff.y = R(-55, 35)
+    const b = overlay.tapBtn
+    b.className = `tm-tap t${tapMult}`
+    tapX.textContent = `x${tapMult}`
+    b.style.setProperty('--p', 1)
+    void b.offsetWidth // restart the pop-in
+    b.classList.add('on')
+    snd.tapAppear(tapMult)
+    flash(at.x, at.y + D + 1.8, at.z, tapMult >= 4 ? '#ffd23a' : '#7af0ff', 14 + tapMult * 6, 3 + tapMult)
+  }
+  function hideTap(nextGap = range(T.tap.gap)) {
+    if (tapOn) overlay.tapBtn.classList.remove('on', 'hit')
+    tapOn = false
+    tapGap = nextGap
   }
 
   // --- Where am I on screen ---
@@ -347,6 +385,11 @@ export function createTreadmill(scene, { hud, camera, renderer }) {
   }
 
   function start() {
+    // A new treadmill was equipped since the last run: rebuild the machine in its colours.
+    if (equippedTreadmill().id !== built && phase === 'off') {
+      built = equippedTreadmill().id
+      m = buildModel()
+    }
     const p = player.position
     const inHub = p.x > HUB.minX + 3 && p.x < HUB.maxX - 3 && p.z > HUB.minZ + 3 && p.z < HUB.maxZ - 3
     if (!inHub) {
@@ -382,6 +425,7 @@ export function createTreadmill(scene, { hud, camera, renderer }) {
     streak = 0
     armed = false
     setActive(true)
+    hideTap(range(T.tap.first))
     snd.deploy()
     flash(at.x, at.y + 0.6, at.z, C.neon, 50, 6)
     puff(at.x, at.y + 0.2, at.z, 1.2, '#efeaff')
@@ -393,6 +437,7 @@ export function createTreadmill(scene, { hud, camera, renderer }) {
     phase = 'stowing'
     t = 0
     setActive(false)
+    hideTap()
     motor?.stop()
     motor = null
     snd.stow()
@@ -415,12 +460,13 @@ export function createTreadmill(scene, { hud, camera, renderer }) {
   onKey('KeyT', toggle)
 
   // --- Gains ---
-  function popup(amount, kind) {
+  function popup(amount, kind, mult = 1) {
     const s = toScreen(head.x, head.y, head.z)
     if (s.behind || overlay.live() > 60) return
     const e = overlay.take('tm-pop')
-    e.classList.remove('crit', 'tapped')
+    e.classList.remove('crit', 'tapped', 't3', 't4', 't5')
     if (kind) e.classList.add(kind)
+    if (kind === 'tapped' && mult > 2) e.classList.add(`t${mult}`)
     e.innerHTML = `${SHOE_SVG}<span>+${short(amount)}</span>`
     const x = s.x + R(-70, 70)
     const y = s.y + R(-30, 20)
@@ -432,7 +478,7 @@ export function createTreadmill(scene, { hud, camera, renderer }) {
     void e.offsetWidth
     e.style.animation = ''
     setTimeout(() => e.remove(), kind === 'crit' ? 1300 : 950)
-    flyShoes(x, y - 10, kind === 'crit' ? 5 : kind === 'tapped' ? 2 : 1)
+    flyShoes(x, y - 10, kind === 'crit' ? 5 : kind === 'tapped' ? Math.min(6, 1 + mult) : 1)
   }
 
   function flyShoes(x0, y0, n) {
@@ -477,32 +523,32 @@ export function createTreadmill(scene, { hud, camera, renderer }) {
     }
   }
 
-  function gain(kind) {
+  function gain(kind, mult = 1) {
     const crit = kind === 'crit'
     const tap = kind === 'tapped'
-    const amount = T.gain * (crit ? T.critMulti : tap ? T.tapMulti : 1)
+    const amount = equippedTreadmill().gain * (crit ? T.critMulti : tap ? mult : 1)
     addSpeed(amount)
     beat++
     pulse = 1
     m.screen.paint(state.speed, beat)
-    popup(amount, kind)
+    popup(amount, kind, mult)
     if (crit) {
       snd.crit()
       gainBurst('#ffd23a', 40, 1.4)
       flash(at.x, at.y + D + 1.2, at.z, '#ffd23a', 40, 6)
     } else if (tap) {
-      snd.tap()
-      gainBurst('#7af0ff', 14, 1.1)
+      snd.tap(mult)
+      gainBurst(mult >= 4 ? '#ffd23a' : '#7af0ff', 10 + mult * 4, 1 + mult * 0.15)
     } else {
       snd.gain(streak++)
       gainBurst(C.neon, 8, 0.8)
     }
-    streakT = 2
+    streakT = T.every + 0.6 // the rising-note streak survives one cooldown
   }
 
   // TAP!!: the round button, or a click / tap on the game world, while running.
   function onTap(e) {
-    if (phase !== 'running') return
+    if (phase !== 'running' || !tapOn) return
     const now = performance.now() / 1000
     if (now - lastTap < T.tapCooldown) return
     lastTap = now
@@ -510,7 +556,7 @@ export function createTreadmill(scene, { hud, camera, renderer }) {
     overlay.tapBtn.classList.remove('hit')
     void overlay.tapBtn.offsetWidth
     overlay.tapBtn.classList.add('hit')
-    gain('tapped')
+    gain('tapped', tapMult)
     e?.preventDefault?.()
   }
   overlay.tapBtn.addEventListener('pointerdown', (e) => {
@@ -595,8 +641,8 @@ export function createTreadmill(scene, { hud, camera, renderer }) {
     const sideK = innerWidth < 640 ? 1 : -1
     const s = toScreen(at.x + at.rx * 0.9 * sideK, at.y + D + 1.3, at.z + at.rz * 0.9 * sideK)
     const pad = 56
-    overlay.tapBtn.style.left = `${Math.min(innerWidth - pad, Math.max(pad, s.x + 70 * sideK))}px`
-    overlay.tapBtn.style.top = `${Math.min(innerHeight - pad * 2.4, Math.max(pad * 1.6, s.y))}px`
+    overlay.tapBtn.style.left = `${Math.min(innerWidth - pad, Math.max(pad, s.x + 70 * sideK + tapOff.x))}px`
+    overlay.tapBtn.style.top = `${Math.min(innerHeight - pad * 2.4, Math.max(pad * 1.6, s.y + tapOff.y))}px`
 
     if (phase !== 'running') return
 
@@ -604,6 +650,16 @@ export function createTreadmill(scene, { hud, camera, renderer }) {
     const mv = Math.hypot(inputState.move.x, inputState.move.z)
     if (mv < 0.1) armed = true
     if ((armed && mv > 0.35) || inputState.jump || !isFrozen()) return stop()
+
+    // TAP!! bubble: a random moment, 5 s, gone; then a random quiet spell before the next.
+    if (tapOn) {
+      tapLeft -= dt
+      overlay.tapBtn.style.setProperty('--p', Math.max(0, tapLeft / T.tap.life).toFixed(3))
+      if (tapLeft <= 0) hideTap()
+    } else if (spool > 0.6) {
+      tapGap -= dt
+      if (tapGap <= 0) showTap()
+    }
 
     // Speed ticks.
     tick += dt

@@ -83,7 +83,7 @@ function attach(room) {
     net.canSave = false
     toast('Could not load your save', 'Progress will not be saved this session', '#ff8a6a')
   })
-  for (const type of ['spins', 'daily', 'leaderboard']) room.onMessage(type, () => {}) // not used yet
+  for (const type of ['leaderboard']) room.onMessage(type, () => {}) // not used yet (ui/server.js handles spins, daily, fuse)
   room.onLeave(() => {
     if (net.room !== room) return
     net.room = null

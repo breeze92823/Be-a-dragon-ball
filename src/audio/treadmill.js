@@ -139,12 +139,25 @@ export function crit() {
   ;[12, 16, 19, 24].forEach((n, i) => modal({ t: t + 0.18 + i * 0.045, f: 659 * semi(n), modes: GLOCK, gain: 0.04, bus, verb: 0.4 }))
 }
 
-export function tap() {
+// A TAP!! bubble popping up: a quick rising blip, higher and sparklier for bigger multipliers.
+export function tapAppear(m = 2) {
+  if (!ready() || !limit('tm-tapA', 150) || !voice(0.6, 1.5)) return
+  const t = now()
+  const bus = A.ui
+  const base = 740 * semi((m - 2) * 2)
+  tone({ t, f: base, f2: base * 1.5, glide: 0.09, d: 0.14, gain: 0.08, bus, verb: 0.2 })
+  modal({ t: t + 0.07, f: base * 2, modes: GLASS, gain: 0.06, bus, verb: 0.3 })
+  if (m >= 4) [0, 4, 7, 12].forEach((n, i) => modal({ t: t + 0.12 + i * 0.05, f: base * 2 * semi(n), modes: GLOCK, gain: 0.04, bus, verb: 0.4 }))
+}
+
+// A TAP!! press; the bigger the multiplier the higher it rings.
+export function tap(m = 2) {
   if (!ready() || !limit('tm-tap', 60) || !voice(0.3, 1)) return
   const t = now()
   const bus = A.ui
+  const up = semi((m - 2) * 2)
   burst({ t, type: 'lowpass', noise: 'brown', f: 1200, a: 0.001, d: 0.05, gain: 0.2, bus })
-  tone({ t, f: vary(620, 0.04), f2: 980, d: 0.08, gain: 0.07, bus })
+  tone({ t, f: vary(620, 0.04) * up, f2: 980 * up, d: 0.08, gain: 0.07, bus })
   burst({ t: t + 0.01, f: 1500, f2: 4500, q: 1, a: 0.01, d: 0.12, gain: 0.04, bus })
 }
 
