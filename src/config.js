@@ -75,19 +75,22 @@ export const SAFE_ZONE = {
   },
 }
 // Fighter rarities: label colour, income range (per second) and whether they get an aura.
+// The array order fixes the roster's names (roster.js seeds by it), so it stays as it is; the
+// value order is the lane's zone order (RARITY_ORDER below): each zone's fighters earn ~5x the
+// zone before. Balanced with the progression sim (BALANCE.md).
 export const RARITIES = [
-  { name: 'Common', color: '#d7dde6', income: [600, 2000] },
-  { name: 'Uncommon', color: '#5bff6a', income: [3e3, 4e4] },
-  { name: 'Rare', color: '#3fa2ff', income: [6e4, 9e5] },
-  { name: 'Epic', color: '#c35bff', income: [2e6, 6e8] },
-  { name: 'Legendary', color: '#ffd23a', income: [1e9, 2e10], aura: true },
-  { name: 'Mythical', color: '#ff4a4a', income: [5e10, 9e11], aura: true },
-  { name: 'Secret', color: '#ffffff', income: [1e12, 5e13], aura: true, outline: '#000000' },
-  { name: 'Heavenly', color: '#ff7ad9', income: [1e14, 9e14], aura: true },
-  { name: 'Eternal', color: '#ff8a1f', income: [1e15, 3e16], aura: true },
-  { name: 'Celestial', color: '#7af0ff', income: [5e16, 6e17], aura: true },
+  { name: 'Common', color: '#d7dde6', income: [500, 2000] },
+  { name: 'Uncommon', color: '#5bff6a', income: [2500, 1e4] },
+  { name: 'Rare', color: '#3fa2ff', income: [12500, 5e4] },
+  { name: 'Epic', color: '#c35bff', income: [62500, 2.5e5] },
+  { name: 'Legendary', color: '#ffd23a', income: [3e5, 1.25e6], aura: true },
+  { name: 'Mythical', color: '#ff4a4a', income: [1.5e6, 6e6], aura: true },
+  { name: 'Secret', color: '#ffffff', income: [8e6, 3e7], aura: true, outline: '#000000' },
+  { name: 'Heavenly', color: '#ff7ad9', income: [1e9, 4e9], aura: true },
+  { name: 'Eternal', color: '#ff8a1f', income: [4e7, 1.5e8], aura: true },
+  { name: 'Celestial', color: '#7af0ff', income: [5e9, 2e10], aura: true },
 ]
-RARITIES.push({ name: 'Divine', color: '#fff27a', income: [1e18, 9e18], aura: true }, { name: 'Primal', color: '#9cff4a', income: [2e19, 9e19], aura: true })
+RARITIES.push({ name: 'Divine', color: '#fff27a', income: [2e8, 8e8], aura: true }, { name: 'Primal', color: '#9cff4a', income: [2.5e10, 1e11], aura: true })
 
 // --- The lane (lane/, layout in LANE.md) ------------------------------------------------
 // Stepping off the green onto the sand turns the player into a winged orb. The
@@ -143,11 +146,12 @@ export const BASE = {
 // Everything is bought with $ (never premium currency).
 export const BASE_BOARD = {
   reach: 34, // m from the player to a board at which its buttons react
-  autoCollect: { price: 250e3, interval: 1 }, // one-time unlock, then an ON/OFF toggle; s between sweeps
-  upgradeMax: { price: 3e6 }, // one-time unlock of Upgrade Max All
+  autoCollect: { price: 2e7, interval: 1 }, // one-time unlock, then an ON/OFF toggle; s between sweeps
+  upgradeMax: { price: 1e9 }, // one-time unlock of Upgrade Max All
   maxUpgrades: 2000, // safety cap on upgrades bought by one Upgrade Max All click
-  // Base Upgrade: 5 steps, each adds multiStep to the base's Cash Multi (x1 -> x3.5).
-  upgrade: { prices: [500e3, 3e6, 20e6, 150e6, 1.2e9], multiStep: 0.5 },
+  // Base Upgrade: 5 steps, each adds multiStep to the base's Cash Multi (x1 -> x3.5). Spread over
+  // the run: ~9 min, ~25 min, ~45 min, ~1.3 h, ~2.3 h of normal play (BALANCE.md).
+  upgrade: { prices: [2.5e7, 3e10, 6e12, 3.7e14, 3.4e15], multiStep: 0.5 },
 }
 
 // Bar: [a, b] colours of the zone's segment on the top progress bar (or 'rainbow').
@@ -166,6 +170,9 @@ export const ZONES = [
   { name: 'Celestial', rarity: 'Celestial', rec: 2.5e8, bar: ['#1fb8ff', '#7af0ff'], floor: '#1a2a5a', wall: '#0f1a40', trim: '#7af0ff', props: 'space', house: ['#1f6bff', '#7af0ff'], guardian: { name: 'Sky Warden', wrap: '#9ae8ff', wrap2: '#2f6bd8', eye: '#ffffff', angry: '#ff3a3a', crown: true } },
   { name: 'Primal', rarity: 'Primal', rec: 8e8, bar: ['#2bb04a', '#ffd23a'], floor: '#8a9a5a', wall: '#5a6a3a', trim: '#ffd23a', props: 'ruins', house: ['#6a8a3a', '#ffd23a'], guardian: { name: 'Elder Colossus', wrap: '#b8c88a', wrap2: '#6a7a3a', eye: '#9cff4a', angry: '#ff3a1a', horns: true, crown: true } },
 ]
+// Rarities from worst to best = the lane's zone order (Fuse tiers, Backpack sort). Backend
+// FUSE_RARITIES and boxity-catalog RANK use the same order.
+export const RARITY_ORDER = ZONES.map((z) => z.rarity)
 
 // Mutations, in Index tab order. id: save/Index key; multi: income multiplier; weight: roll odds
 // (roster.js rollMutation, after LANE.mutationChance); tab: the Index tab's two colours.
@@ -524,13 +531,16 @@ export const INDEX = {
   numbered: ['Unit', 'Gamma', 'Model', 'Cyber'],
 }
 
-// Rebirth: needs cash and Speed, resets both, raises the money multiplier (state.moneyMulti()).
+// Rebirth: needs cash and Speed, resets both, raises the money multiplier (state.moneyMulti())
+// and the treadmill training multiplier (state.trainMulti()), so the Speed you lose comes back
+// faster each time. First one around minute 12 of normal play, then every 5-30 min (BALANCE.md).
 export const REBIRTH = {
-  cash: 1.6e6, // $ needed for the first rebirth, x cashGrowth for each after it
-  cashGrowth: 6,
-  speed: 5000, // Speed needed for the first rebirth, x speedGrowth for each after it
-  speedGrowth: 1.9,
-  multiStep: 0.5, // x1.0 -> x1.5 -> x2.0 ...
+  cash: 5e6, // $ needed for the first rebirth, x cashGrowth for each after it
+  cashGrowth: 7,
+  speed: 25000, // Speed needed for the first rebirth, x speedGrowth for each after it
+  speedGrowth: 2.2,
+  multiStep: 0.5, // money x1.0 -> x1.5 -> x2.0 ...
+  speedStep: 0.25, // treadmill Speed gain x1.0 -> x1.25 -> x1.5 ...
   skipCost: 3, // Skip! (rebirth without the reset or the Speed requirement) costs this x the cash requirement, in $
 }
 
@@ -628,25 +638,27 @@ export const BASE_SKINS = [
 ]
 
 // Treadmill Shop (ui/treadmills.js): the equipped treadmill sets the Speed gained per stride
-// (the starter's gain is TREADMILL.gain) and the machine's colours. Prices in $; bg = card gradient.
+// (the starter's gain is TREADMILL.gain; x state.trainMulti() after rebirths) and the machine's
+// colours. Prices in $; bg = card gradient. Gains and prices are fitted to the progression sim:
+// a new one every 1-2 min at the start, every ~30-60 min near the last zone (BALANCE.md).
 export const TREADMILLS = [
   { id: '', name: 'Training Treadmill', gain: 100, price: 0, colors: { body: '#c9b8ff', bodyDark: '#a493e8', trim: '#6f5bd6', neon: '#57f0ff' }, bg: ['#dfe3ee', '#9aa2b8'] },
-  { id: 'meadow', name: 'Meadow Treadmill', gain: 250, price: 25e3, colors: { body: '#7ee06a', bodyDark: '#3fae3a', trim: '#1f7a2a', neon: '#c8ff5a' }, bg: ['#c8ffb0', '#5fcf4a'] },
-  { id: 'grape', name: 'Grape Treadmill', gain: 500, price: 5e5, colors: { body: '#c86aff', bodyDark: '#9a3ae8', trim: '#5a1aa8', neon: '#ff7af0' }, bg: ['#ecb8ff', '#a84ae8'] },
-  { id: 'sunrise', name: 'Sunrise Treadmill', gain: 1000, price: 6e6, colors: { body: '#ffc84a', bodyDark: '#f09a1a', trim: '#b8600a', neon: '#fff27a' }, bg: ['#fff0b0', '#ffb84a'] },
-  { id: 'coral', name: 'Coral Treadmill', gain: 2500, price: 9e7, colors: { body: '#ff8a7a', bodyDark: '#e85a4a', trim: '#a82a2a', neon: '#ffd0a0' }, bg: ['#ffd0c8', '#ff7a6a'] },
-  { id: 'frost', name: 'Frostbite Treadmill', gain: 6000, price: 1e9, colors: { body: '#bff0ff', bodyDark: '#7fc8f0', trim: '#2f7fd8', neon: '#e8ffff' }, bg: ['#e8fbff', '#7fd0f0'] },
-  { id: 'gilded', name: 'Gilded Treadmill', gain: 15000, price: 2.4e9, colors: { body: '#ffe27a', bodyDark: '#d8a81f', trim: '#8a6a0a', neon: '#fff8c0' }, bg: ['#fff4b8', '#e8b820'] },
-  { id: 'candy', name: 'Candy Treadmill', gain: 1e5, price: 1.4e10, colors: { body: '#ffb0e0', bodyDark: '#ff7ac8', trim: '#e83a9a', neon: '#ffffff' }, bg: ['#ffe0f4', '#ff8ad0'] },
-  { id: 'inferno', name: 'Inferno Treadmill', gain: 4e5, price: 8e10, colors: { body: '#ff4a3a', bodyDark: '#c41a1a', trim: '#6a0a0a', neon: '#ffb04a' }, bg: ['#ff9a8a', '#d8202a'] },
-  { id: 'cloud', name: 'Cloud Rider Treadmill', gain: 7e5, price: 8e11, colors: { body: '#fff4c0', bodyDark: '#ffd86a', trim: '#4ab8ff', neon: '#bfeaff' }, bg: ['#fffbe0', '#ffe27a'] },
-  { id: 'thunder', name: 'Thunder Treadmill', gain: 1.2e6, price: 9e12, colors: { body: '#5a7aff', bodyDark: '#2a3ad8', trim: '#fff27a', neon: '#fff27a' }, bg: ['#b8c8ff', '#3a5ae8'] },
-  { id: 'abyss', name: 'Abyss Treadmill', gain: 2e6, price: 9.5e13, colors: { body: '#1f6a8a', bodyDark: '#0f3a5a', trim: '#2affd8', neon: '#2affd8' }, bg: ['#8ad8e8', '#1f6a8a'] },
-  { id: 'ravager', name: 'Ravager Treadmill', gain: 3.5e6, price: 8e14, colors: { body: '#6a3ab8', bodyDark: '#2a1a5a', trim: '#ff3af0', neon: '#ff7af0' }, bg: ['#c8a8ff', '#4a2a8a'] },
-  { id: 'divine', name: 'Divine Treadmill', gain: 6e6, price: 8e15, colors: { body: '#ff6a7a', bodyDark: '#c4203a', trim: '#ffd23a', neon: '#ffe14a' }, bg: ['#ffb0b8', '#c4303a'] },
-  { id: 'elixir', name: 'Elixir Treadmill', gain: 1e7, price: 8e16, colors: { body: '#3a5a4a', bodyDark: '#1f3a2a', trim: '#8dff5a', neon: '#8dff5a' }, bg: ['#a8d8b8', '#2f6a4a'] },
-  { id: 'cosmic', name: 'Cosmic Treadmill', gain: 1.8e7, price: 9e17, colors: { body: '#2a2a6a', bodyDark: '#14143a', trim: '#7af0ff', neon: '#c8a8ff' }, bg: ['#9a9af0', '#2a2a7a'] },
-  { id: 'primal', name: 'Primal Treadmill', gain: 3e7, price: 1e19, colors: { body: '#9cff4a', bodyDark: '#5aa82a', trim: '#ffd23a', neon: '#ffffff' }, bg: ['#e0ffb8', '#7ad83a'] },
+  { id: 'meadow', name: 'Meadow Treadmill', gain: 160, price: 5e3, colors: { body: '#7ee06a', bodyDark: '#3fae3a', trim: '#1f7a2a', neon: '#c8ff5a' }, bg: ['#c8ffb0', '#5fcf4a'] },
+  { id: 'grape', name: 'Grape Treadmill', gain: 220, price: 9e4, colors: { body: '#c86aff', bodyDark: '#9a3ae8', trim: '#5a1aa8', neon: '#ff7af0' }, bg: ['#ecb8ff', '#a84ae8'] },
+  { id: 'sunrise', name: 'Sunrise Treadmill', gain: 290, price: 8e5, colors: { body: '#ffc84a', bodyDark: '#f09a1a', trim: '#b8600a', neon: '#fff27a' }, bg: ['#fff0b0', '#ffb84a'] },
+  { id: 'coral', name: 'Coral Treadmill', gain: 370, price: 2.8e6, colors: { body: '#ff8a7a', bodyDark: '#e85a4a', trim: '#a82a2a', neon: '#ffd0a0' }, bg: ['#ffd0c8', '#ff7a6a'] },
+  { id: 'frost', name: 'Frostbite Treadmill', gain: 480, price: 8e6, colors: { body: '#bff0ff', bodyDark: '#7fc8f0', trim: '#2f7fd8', neon: '#e8ffff' }, bg: ['#e8fbff', '#7fd0f0'] },
+  { id: 'gilded', name: 'Gilded Treadmill', gain: 630, price: 4.5e7, colors: { body: '#ffe27a', bodyDark: '#d8a81f', trim: '#8a6a0a', neon: '#fff8c0' }, bg: ['#fff4b8', '#e8b820'] },
+  { id: 'candy', name: 'Candy Treadmill', gain: 820, price: 5.7e8, colors: { body: '#ffb0e0', bodyDark: '#ff7ac8', trim: '#e83a9a', neon: '#ffffff' }, bg: ['#ffe0f4', '#ff8ad0'] },
+  { id: 'inferno', name: 'Inferno Treadmill', gain: 1100, price: 8.5e9, colors: { body: '#ff4a3a', bodyDark: '#c41a1a', trim: '#6a0a0a', neon: '#ffb04a' }, bg: ['#ff9a8a', '#d8202a'] },
+  { id: 'cloud', name: 'Cloud Rider Treadmill', gain: 1400, price: 3.1e11, colors: { body: '#fff4c0', bodyDark: '#ffd86a', trim: '#4ab8ff', neon: '#bfeaff' }, bg: ['#fffbe0', '#ffe27a'] },
+  { id: 'thunder', name: 'Thunder Treadmill', gain: 1800, price: 6.4e12, colors: { body: '#5a7aff', bodyDark: '#2a3ad8', trim: '#fff27a', neon: '#fff27a' }, bg: ['#b8c8ff', '#3a5ae8'] },
+  { id: 'abyss', name: 'Abyss Treadmill', gain: 2300, price: 1.1e14, colors: { body: '#1f6a8a', bodyDark: '#0f3a5a', trim: '#2affd8', neon: '#2affd8' }, bg: ['#8ad8e8', '#1f6a8a'] },
+  { id: 'ravager', name: 'Ravager Treadmill', gain: 3000, price: 1.5e15, colors: { body: '#6a3ab8', bodyDark: '#2a1a5a', trim: '#ff3af0', neon: '#ff7af0' }, bg: ['#c8a8ff', '#4a2a8a'] },
+  { id: 'divine', name: 'Divine Treadmill', gain: 6600, price: 5.2e15, colors: { body: '#ff6a7a', bodyDark: '#c4203a', trim: '#ffd23a', neon: '#ffe14a' }, bg: ['#ffb0b8', '#c4303a'] },
+  { id: 'elixir', name: 'Elixir Treadmill', gain: 12000, price: 4.5e16, colors: { body: '#3a5a4a', bodyDark: '#1f3a2a', trim: '#8dff5a', neon: '#8dff5a' }, bg: ['#a8d8b8', '#2f6a4a'] },
+  { id: 'cosmic', name: 'Cosmic Treadmill', gain: 16000, price: 2.4e17, colors: { body: '#2a2a6a', bodyDark: '#14143a', trim: '#7af0ff', neon: '#c8a8ff' }, bg: ['#9a9af0', '#2a2a7a'] },
+  { id: 'primal', name: 'Primal Treadmill', gain: 28000, price: 4.2e17, colors: { body: '#9cff4a', bodyDark: '#5aa82a', trim: '#ffd23a', neon: '#ffffff' }, bg: ['#e0ffb8', '#7ad83a'] },
 ]
 
 // Dragon Ball Shop (ui/balls.js): the equipped Dragon Ball is the ball you roll down the lane as,
@@ -654,15 +666,15 @@ export const TREADMILLS = [
 // look: base colour, shade, star colour, star count, optional pattern ('grid' | 'crack' | 'wings').
 export const BALLS = [
   { id: '', name: 'Starter Dragon Ball', rarity: 'Common', luck: 1, price: 0, look: { base: '#5a5e6a', dark: '#24262e', star: '#ffffff', stars: 3 } },
-  { id: 'lucky', name: 'Lucky Dragon Ball', rarity: 'Uncommon', luck: 2, price: 2.5e5, look: { base: '#ffa040', dark: '#e0560a', star: '#e8141b', stars: 3 } },
-  { id: 'circuit', name: 'Circuit Dragon Ball', rarity: 'Rare', luck: 3, price: 8e6, look: { base: '#1f5a2a', dark: '#0a2a12', star: '#5aff6a', stars: 4, pattern: 'grid' } },
-  { id: 'ember', name: 'Ember Dragon Ball', rarity: 'Epic', luck: 4, price: 3e8, look: { base: '#ff5a2a', dark: '#8a1a0a', star: '#ffe14a', stars: 4, pattern: 'crack' } },
-  { id: 'frost', name: 'Frost Dragon Ball', rarity: 'Legendary', luck: 5, price: 1.2e10, look: { base: '#bff0ff', dark: '#4ab8e8', star: '#1f5ad8', stars: 5 } },
-  { id: 'storm', name: 'Storm Dragon Ball', rarity: 'Mythical', luck: 6, price: 5e11, look: { base: '#6a7aff', dark: '#1a1f8a', star: '#fff27a', stars: 5, pattern: 'crack' } },
-  { id: 'void', name: 'Void Dragon Ball', rarity: 'Secret', luck: 7, price: 2.5e13, look: { base: '#3a2a4a', dark: '#08040e', star: '#ff3af0', stars: 6 } },
-  { id: 'chrome', name: 'Chrome Dragon Ball', rarity: 'Eternal', luck: 8, price: 2.5e16, look: { base: '#e8ecf4', dark: '#7a8098', star: '#e8141b', stars: 6, pattern: 'crack' } },
-  { id: 'serpent', name: 'Serpent Dragon Ball', rarity: 'Heavenly', luck: 10, price: 5e17, look: { base: '#3a8a4a', dark: '#0f3a1a', star: '#ff2a2a', stars: 3, pattern: 'crack' } },
-  { id: 'angelic', name: 'Angelic Dragon Ball', rarity: 'Celestial', luck: 11, price: 1e19, look: { base: '#ffffff', dark: '#c8d4ff', star: '#8aa8ff', stars: 7, pattern: 'wings' } },
+  { id: 'lucky', name: 'Lucky Dragon Ball', rarity: 'Uncommon', luck: 2, price: 4e6, look: { base: '#ffa040', dark: '#e0560a', star: '#e8141b', stars: 3 } },
+  { id: 'circuit', name: 'Circuit Dragon Ball', rarity: 'Rare', luck: 3, price: 3.4e8, look: { base: '#1f5a2a', dark: '#0a2a12', star: '#5aff6a', stars: 4, pattern: 'grid' } },
+  { id: 'ember', name: 'Ember Dragon Ball', rarity: 'Epic', luck: 4, price: 2.9e10, look: { base: '#ff5a2a', dark: '#8a1a0a', star: '#ffe14a', stars: 4, pattern: 'crack' } },
+  { id: 'frost', name: 'Frost Dragon Ball', rarity: 'Legendary', luck: 5, price: 1.3e12, look: { base: '#bff0ff', dark: '#4ab8e8', star: '#1f5ad8', stars: 5 } },
+  { id: 'storm', name: 'Storm Dragon Ball', rarity: 'Mythical', luck: 6, price: 5e13, look: { base: '#6a7aff', dark: '#1a1f8a', star: '#fff27a', stars: 5, pattern: 'crack' } },
+  { id: 'void', name: 'Void Dragon Ball', rarity: 'Secret', luck: 7, price: 5.9e14, look: { base: '#3a2a4a', dark: '#08040e', star: '#ff3af0', stars: 6 } },
+  { id: 'chrome', name: 'Chrome Dragon Ball', rarity: 'Eternal', luck: 8, price: 3.5e15, look: { base: '#e8ecf4', dark: '#7a8098', star: '#e8141b', stars: 6, pattern: 'crack' } },
+  { id: 'serpent', name: 'Serpent Dragon Ball', rarity: 'Heavenly', luck: 10, price: 1.2e16, look: { base: '#3a8a4a', dark: '#0f3a1a', star: '#ff2a2a', stars: 3, pattern: 'crack' } },
+  { id: 'angelic', name: 'Angelic Dragon Ball', rarity: 'Celestial', luck: 11, price: 2.7e16, look: { base: '#ffffff', dark: '#c8d4ff', star: '#8aa8ff', stars: 7, pattern: 'wings' } },
 ]
 
 // Dragon Spin (ui/spin.js; backend spin.ts SPIN_WEDGES: same ids, order and weights). One free spin

@@ -11,7 +11,7 @@
 // NET.saveEvery s, and flushed when the tab is hidden or closed.
 import { Client } from '@colyseus/sdk'
 import { NET } from './config.js'
-import { authState, canResolveServer, getLookJson, launchRoomId, locateRoom, getOutfitKey, getPfp, getToken, playerInRoom, playerJoined, resolveServerEndpoint, subscribeAuth, updateRoom } from './bloxity.js'
+import { authState, canResolveServer, getLookJson, launchRoomId, locateRoom, canonicalRoomKey, getOutfitKey, getPfp, getToken, playerInRoom, playerJoined, resolveServerEndpoint, subscribeAuth, updateRoom } from './bloxity.js'
 import { hydrate, setSaver, snapshot } from './state.js'
 import { toast } from './toast.js'
 
@@ -169,12 +169,16 @@ function attach(room) {
     net.connected = false
     net.loaded = false
     updateRoom('')
+    rejoinKey = roomKey.includes('~') ? roomKey : '' // a bare id can't be joined without its pod
     setTimeout(connect, NET.rejoin * 1000)
   })
 }
 
 let connecting = false
 let launchOnce = false // the ?roomId= of the page is tried on the first connect only
+let roomKey = '' // "<relayRoomId>~<colyseusRoomId>" of the room we are in
+let canonical = '' // the directory's id for the current room, once known
+let rejoinKey = '' // set when that room dropped us: tried before matchmaking
 let retryIn = NET.retry
 async function connect() {
   if (!hasServer() || connecting || net.connected) return
@@ -191,7 +195,9 @@ async function connect() {
     else {
       // Arrived from a friend's invite or the game page's Open Rooms Join button (?roomId=): join that very
       // room through the pod that holds it; when it is gone or full, fall back to normal matchmaking.
-      const launch = launchOnce ? '' : launchRoomId()
+      // After a dropped connection the same room comes first (friends stay together), then matchmaking.
+      const launch = rejoinKey || (launchOnce ? '' : launchRoomId())
+      rejoinKey = ''
       launchOnce = true
       const target = launch ? await locateRoom(launch).catch(() => null) : null
       if (target) {
@@ -203,7 +209,7 @@ async function connect() {
         }
       }
       if (!room) {
-        const found = await resolveServerEndpoint(isGuest(id.userId) ? undefined : id.userId)
+        const found = await resolveServerEndpoint()
         room = await new Client(found.endpoint).joinOrCreate(NET.room, options)
         relay = found.relayRoomId || ''
       }
@@ -212,7 +218,21 @@ async function connect() {
     retryIn = NET.retry
     attach(room)
     // Friends are invited into the room reported here, so it names the pod's relay too: "<relay>~<room>".
-    updateRoom(relay ? `${relay}~${room.roomId}` : room.roomId)
+    roomKey = relay ? `${relay}~${room.roomId}` : room.roomId
+    updateRoom(roomKey)
+    // Everyone in this room must report the SAME id (the portal's "In this server" list groups by it):
+    // swap in the directory's canonical relay once the room is listed.
+    const joined = room
+    canonical = ''
+    for (const wait of [2500, 5000, 10000]) {
+      setTimeout(async () => {
+        if (net.room !== joined || roomKey.includes('~') && roomKey === canonical) return
+        const key = await canonicalRoomKey(joined.roomId)
+        if (!key || net.room !== joined) return
+        canonical = roomKey = key
+        updateRoom(key)
+      }, wait)
+    }
     console.info(`[net] joined ${NET.room} ${room.roomId} as ${room.sessionId}`)
   } catch (err) {
     console.info(`[net] no game server (retrying in ${retryIn}s); progress is not saved meanwhile`, err?.message ?? err)

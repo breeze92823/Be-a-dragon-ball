@@ -1,5 +1,5 @@
 import './backpack.css'
-import { BACKPACK, LANE, MUTATIONS, RARITIES } from './config.js'
+import { BACKPACK, LANE, MUTATIONS, RARITIES, RARITY_ORDER } from './config.js'
 import { onReservedAreas } from './bloxity.js'
 import { onKey } from './input.js'
 import { changed, onState, state } from './state.js'
@@ -22,7 +22,7 @@ const BAG_SVG =
   '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M22 16v-4a10 10 0 0 1 20 0v4" fill="none" stroke="#0b1a3a" stroke-width="5" stroke-linecap="round"/><path d="M12 28a12 12 0 0 1 12-12h16a12 12 0 0 1 12 12v24a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6Z" fill="#f2f4fa" stroke="#0b1a3a" stroke-width="4"/><path d="M18 38h28v10a4 4 0 0 1-4 4H22a4 4 0 0 1-4-4Z" fill="#c9cfe0" stroke="#0b1a3a" stroke-width="3.5"/><path d="M30 38v6h4v-6" fill="#0b1a3a"/></svg>'
 
 const rarityColor = (name) => RARITIES.find((r) => r.name === name)?.color ?? '#ffffff'
-const rarityRank = (name) => RARITIES.findIndex((r) => r.name === name)
+const rarityRank = (name) => RARITY_ORDER.indexOf(name)
 const mutationColor = (name) => MUTATIONS.find((m) => m.name === name)?.color ?? '#ffffff'
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 

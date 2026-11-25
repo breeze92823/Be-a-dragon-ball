@@ -1,10 +1,11 @@
-import { FUSE, MUTATIONS, RARITIES } from '../config.js'
+import { FUSE, MUTATIONS, RARITY_ORDER } from '../config.js'
 
 // Fuse Machine rules, the same as the backend's fuse.ts (which decides when online; these run
 // the page's offline fusions and draw the Possible Outcomes). Inputs: [{ rarity, mutation }]
 // where mutation is a mutation id or null.
 
-const rarityIndex = (name) => RARITIES.findIndex((r) => r.name === name)
+// Tiers in the lane's zone order (= backend FUSE_RARITIES), so a step up is always worth more.
+const rarityIndex = (name) => RARITY_ORDER.indexOf(name)
 const mutationIdOf = (v) => MUTATIONS.find((m) => m.id === v || m.name === v)?.id ?? null
 
 export const fuseInputs = (fighters) => fighters.map((f) => ({ rarity: f.rarity, mutation: mutationIdOf(f.mutation) }))
@@ -20,7 +21,7 @@ export function outcomes(inputs) {
   const total = FUSE.steps.reduce((n, s) => n + s.weight, 0)
   const out = []
   for (const s of FUSE.steps) {
-    const rarity = RARITIES[Math.min(RARITIES.length - 1, base + s.step)].name
+    const rarity = RARITY_ORDER[Math.min(RARITY_ORDER.length - 1, base + s.step)]
     const hit = out.find((o) => o.rarity === rarity)
     if (hit) hit.chance += s.weight / total
     else out.push({ rarity, chance: s.weight / total })

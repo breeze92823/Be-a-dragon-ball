@@ -1,5 +1,5 @@
 import { LANE, REBIRTH } from '../config.js'
-import { changed, moneyMulti, state } from '../state.js'
+import { changed, moneyMulti, state, trainMulti } from '../state.js'
 import { toast } from '../toast.js'
 import { sfx } from '../audio/index.js'
 import { big, button, createWindow, el, isOpen, money } from './shell.js'
@@ -11,7 +11,9 @@ import { big, button, createWindow, el, isOpen, money } from './shell.js'
 const ICON = '<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="24" fill="#f4f4f8" stroke="#1d2a44" stroke-width="4"/><path d="M14 30 a18 18 0 0 1 32 -10 l4 -6 l2 18 l-17 -4 l6 -3 a12 12 0 0 0 -21 6Z" fill="#ff3a5a" stroke="#5a0a1a" stroke-width="3" stroke-linejoin="round"/><path d="M50 34 a18 18 0 0 1 -32 10 l-4 6 l-2 -18 l17 4 l-6 3 a12 12 0 0 0 21 -6Z" fill="#c8d0e8" stroke="#1d2a44" stroke-width="3" stroke-linejoin="round"/></svg>'
 const CASH = '<svg viewBox="0 0 64 48"><g stroke="#0b3a14" stroke-width="3" stroke-linejoin="round"><path d="M6 20 L40 6 L60 22 L26 38Z" fill="#3fa84a"/><path d="M6 20 L6 28 L26 46 L26 38Z" fill="#2a7a34"/><path d="M26 38 L60 22 L60 30 L26 46Z" fill="#1f6a2a"/><path d="M18 15 L52 29" stroke="#ffd23a" stroke-width="7"/></g></svg>'
 
-export const cashNeeded = (n = state.rebirths) => REBIRTH.cash * Math.pow(REBIRTH.cashGrowth, n)
+const BOLT = '<svg viewBox="0 0 48 48"><path d="M28 2 L8 28 L22 28 L18 46 L40 18 L26 18Z" fill="#fff27a" stroke="#08304a" stroke-width="3" stroke-linejoin="round"/></svg>'
+
+export const cashNeeded =(n = state.rebirths) => REBIRTH.cash * Math.pow(REBIRTH.cashGrowth, n)
 export const speedNeeded = (n = state.rebirths) => REBIRTH.speed * Math.pow(REBIRTH.speedGrowth, n)
 export const skipPrice = () => cashNeeded() * REBIRTH.skipCost
 export const canRebirth = () => state.money >= cashNeeded() && state.speed >= speedNeeded()
@@ -34,13 +36,14 @@ export function createRebirth({ hud }) {
   actions.append(go, el('div', 'rb-or ol', 'OR'), skip)
   w.body.append(row, box, actions)
 
-  const multiBox = (label, k) => `<h3 class="ol">${label}</h3><div class="rb-multi ol">${CASH}x${k.toFixed(1)} Money</div>`
+  const multiBox = (label, k, t) =>
+    `<h3 class="ol">${label}</h3><div class="rb-multi ol">${CASH}x${k.toFixed(1)} Money</div><div class="rb-multi rb-train ol">${BOLT}x${t.toFixed(2)} Training</div>`
 
   function refresh() {
     const n = state.rebirths
     w.title.textContent = `Rebirth : ${n}`
-    cur.innerHTML = multiBox(`Rebirth ${n} (Current)`, moneyMulti())
-    next.innerHTML = multiBox(`Rebirth ${n + 1}`, moneyMulti() + REBIRTH.multiStep)
+    cur.innerHTML = multiBox(`Rebirth ${n} (Current)`, moneyMulti(), trainMulti())
+    next.innerHTML = multiBox(`Rebirth ${n + 1}`, moneyMulti() + REBIRTH.multiStep, trainMulti() + (REBIRTH.speedStep ?? 0))
     const c = cashNeeded()
     const s = speedNeeded()
     cashBar.firstChild.style.width = `${Math.min(1, state.money / c) * 100}%`
@@ -56,7 +59,7 @@ export function createRebirth({ hud }) {
     state.rebirths++
     changed()
     hud.moneyPop?.()
-    toast(`Rebirth ${state.rebirths}!`, `${how} Money is now x${moneyMulti().toFixed(1)}`, '#ff5a6a')
+    toast(`Rebirth ${state.rebirths}!`, `${how} Money x${moneyMulti().toFixed(1)}, Training x${trainMulti().toFixed(2)}`, '#ff5a6a')
     sfx.sparkle?.(0)
     refresh()
   }

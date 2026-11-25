@@ -449,6 +449,14 @@
   height: 1em;
   flex: none;
 }
+/* Second line under the money multiplier: the treadmill training multiplier. */
+.rb-multi.rb-train {
+  margin-top: 6px;
+  min-height: 36px;
+  font-size: clamp(14px, 3vh, 30px);
+  border-color: #08304a;
+  background: linear-gradient(#9af4ff, #3fc4ff 50%, #1a8ae8);
+}
 .rb-arrow {
   width: clamp(28px, 5vh, 52px);
   align-self: center;
@@ -1070,6 +1078,10 @@ body.backpack-open .ui-boost {
   }
   .rb-multi {
     font-size: clamp(15px, 4.6vw, 22px);
+  }
+  .rb-multi.rb-train {
+    min-height: 32px;
+    font-size: clamp(12px, 3.8vw, 18px);
   }
   .rb-multi svg {
     display: none;

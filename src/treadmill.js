@@ -8,7 +8,7 @@ import { player, placePlayer, resetPlayer, setFrozen, isFrozen } from './player.
 import { syncYawToPlayer } from './camera.js'
 import { inputState, onKey } from './input.js'
 import { segmentClear } from './physics.js'
-import { addSpeed, equippedTreadmill, state } from './state.js'
+import { addSpeed, equippedTreadmill, state, trainMulti } from './state.js'
 import { flash, glow, puff, smoke } from './fx.js'
 import { toast } from './toast.js'
 import * as snd from './audio/treadmill.js'
@@ -526,7 +526,7 @@ export function createTreadmill(scene, { hud, camera, renderer }) {
   function gain(kind, mult = 1) {
     const crit = kind === 'crit'
     const tap = kind === 'tapped'
-    const amount = equippedTreadmill().gain * (crit ? T.critMulti : tap ? mult : 1)
+    const amount = Math.round(equippedTreadmill().gain * trainMulti() * (crit ? T.critMulti : tap ? mult : 1))
     addSpeed(amount)
     beat++
     pulse = 1

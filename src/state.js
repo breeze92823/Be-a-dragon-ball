@@ -1,4 +1,12 @@
-import { LANE, BASE, BASE_BOARD, BALLS, BOOSTS, GAME_SETTINGS, REBIRTH, TREADMILLS } from './config.js'
+import { LANE, BASE, BASE_BOARD, BALLS, BOOSTS, GAME_SETTINGS, MUTATIONS, RARITIES, REBIRTH, TREADMILLS } from './config.js'
+
+// The most a fighter of a rarity can earn: the rarity's top income x the best mutation x the
+// deepest catch luck x the top of the hatch spread (lane/index.js rollFighter: 0.8-1.3).
+const MUTATION_MAX = Math.max(...MUTATIONS.map((m) => m.multi))
+function incomeCap(rarity) {
+  const r = RARITIES.find((x) => x.name === rarity)
+  return r ? Math.round(r.income[1] * MUTATION_MAX * (1 + LANE.luckMax) * 1.3) : 0
+}
 
 // The player's progress: money, Speed stat, the fighters in the hotbar and the
 // Backpack, and the ones placed on base slots. Saved ONLY on the game server
@@ -83,7 +91,14 @@ export function hydrate(doc) {
     state.slots.forEach((sl, i) => Object.assign(sl, { fighter: null, level: 1, stored: 0 }, doc.slots[i] ?? {}))
   }
   let top = 0
-  for (const f of [...state.inventory, ...state.backpack, ...state.slots.map((sl) => sl.fighter)]) if (f && f.id > top) top = f.id
+  for (const f of [...state.inventory, ...state.backpack, ...state.slots.map((sl) => sl.fighter)]) {
+    if (!f) continue
+    if (f.id > top) top = f.id
+    // Saves from before the economy rebalance hold fighters earning far more than any can now:
+    // bring them down to the most their rarity can roll today (no-op for current fighters).
+    const cap = incomeCap(f.rarity)
+    if (cap && f.income > cap) f.income = cap
+  }
   state.nextId = Math.max(typeof doc.nextId === 'number' ? doc.nextId : 1, top + 1)
   if (typeof doc.rebirths === 'number') state.rebirths = doc.rebirths
   if (typeof doc.playtime === 'number') state.playtime = Math.max(state.playtime, doc.playtime)
@@ -124,6 +139,8 @@ export function tickSave(dt) {
 // --- Windows (src/ui/) ------------------------------------------------------------
 // Money multiplier from rebirths (x1.0, x1.5, x2.0 ...): base income and cash rewards use it.
 export const moneyMulti = () => 1 + state.rebirths * REBIRTH.multiStep
+// Treadmill training multiplier from rebirths (x1.0, x1.25, x1.5 ...): Speed per stride / tap.
+export const trainMulti = () => 1 + state.rebirths * (REBIRTH.speedStep ?? 0)
 // The Speed stat with the x2 Speed boost applied: what the lane's orb runs on.
 export const speedBoosted = () => Date.now() < state.speedBoostUntil
 export const luckBoosted = () => Date.now() < state.luckBoostUntil

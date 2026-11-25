@@ -1,4 +1,4 @@
-import { FUSE, MUTATIONS, RARITIES } from '../config.js'
+import { FUSE, MUTATIONS, RARITIES, RARITY_ORDER } from '../config.js'
 import { addFighter, allFighters, removeFighters, state } from '../state.js'
 import { indexKey, makeFighter, mutationOf, rosterFor } from '../roster.js'
 import { toast } from '../toast.js'
@@ -18,7 +18,7 @@ import { discover } from './rewards.js'
 const ICON = '<svg viewBox="0 0 64 64"><rect x="6" y="20" width="52" height="34" rx="6" fill="#6a3cff" stroke="#14103a" stroke-width="4"/><rect x="14" y="8" width="12" height="16" rx="3" fill="#eef0ff" stroke="#14103a" stroke-width="3"/><rect x="38" y="4" width="12" height="20" rx="3" fill="#eef0ff" stroke="#14103a" stroke-width="3"/><circle cx="22" cy="38" r="7" fill="#ffe14a" stroke="#14103a" stroke-width="3"/><circle cx="42" cy="38" r="7" fill="#4fe05a" stroke="#14103a" stroke-width="3"/></svg>'
 const PLUS = '<svg viewBox="0 0 24 24"><path d="M12 4v16M4 12h16" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/></svg>'
 const rarityOf = (name) => RARITIES.find((r) => r.name === name) ?? RARITIES[0]
-const rarityRank = (name) => RARITIES.findIndex((r) => r.name === name)
+const rarityRank = (name) => RARITY_ORDER.indexOf(name)
 const pct = (c) => `${Math.round(c * 1000) / 10}%`
 
 export function createFuse({ hud, portraits }) {

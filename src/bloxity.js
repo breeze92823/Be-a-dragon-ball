@@ -304,8 +304,10 @@ export function canResolveServer() {
 }
 // { endpoint, relayRoomId }: relayRoomId is the matchmaker relay pinning the pod (the endpoint is
 // {playUrl}/v1/ws/<relayRoomId>). Rejects (net.js retries with backoff) when the matchmaker can't answer.
-export async function resolveServerEndpoint(userId) {
-  const { endpoint, roomId, cold } = await sdk().net.resolveEndpoint(GAME_SLUG, userId ? { userId } : undefined)
+// No options on purpose: the SDK already asks as the signed-in user (or this page's guest id), and an
+// explicit userId would skip its early seat prefetch; the party ticket rides on the request either way.
+export async function resolveServerEndpoint() {
+  const { endpoint, roomId, cold } = await sdk().net.resolveEndpoint(GAME_SLUG)
   if (cold) console.info('[net] waking up a server...')
   return { endpoint, relayRoomId: roomId }
 }
@@ -339,6 +341,23 @@ export async function locateRoom(id) {
   const rooms = res.ok ? (await res.json())?.rooms ?? [] : []
   const r = rooms.find((r) => r.colyseusRoomId === roomId && !r.locked && r.players < r.maxPlayers)
   return r ? { endpoint: r.joinUrl, roomId: r.colyseusRoomId, relayRoomId: r.relayRoomId } : null
+}
+
+// The one id every player of a room reports, so the portal's "In this server" list (players whose
+// reported room matches) groups them: "<relayRoomId>~<colyseusRoomId>" with the relay the matchmaker's
+// directory names for the room (each player's own resolve may have returned a different relay for
+// the same pod). '' when the directory doesn't list the room yet (it fills every ~2 s).
+export async function canonicalRoomKey(colyseusRoomId) {
+  try {
+    const playUrl = sdk()?.environment?.()?.playUrl
+    if (!playUrl || !colyseusRoomId) return ''
+    const res = await fetch(`${playUrl.replace(/\/$/, '')}/v1/dir/${encodeURIComponent(GAME_SLUG)}/list`)
+    if (!res.ok) return ''
+    const r = ((await res.json())?.rooms ?? []).find((x) => x.colyseusRoomId === colyseusRoomId)
+    return r?.relayRoomId ? `${r.relayRoomId}~${colyseusRoomId}` : ''
+  } catch {
+    return ''
+  }
 }
 
 // Reports the room this player is in ('' = not in a joinable room), so the portal's friend invites
