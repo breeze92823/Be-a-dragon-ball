@@ -69,21 +69,21 @@ function studTextures() {
       ctx.fillRect(px, py + cell - 2, cell, 2)
       ctx.fillRect(px + cell - 2, py, 2, cell)
       // The "L" mark.
-      ctx.strokeStyle = 'rgba(0,0,0,0.13)'
-      ctx.lineWidth = 4
+      ctx.strokeStyle = 'rgba(0,0,0,0.075)'
+      ctx.lineWidth = 3
       ctx.lineCap = 'round'
       ctx.beginPath()
-      ctx.moveTo(px + cell * 0.36, py + cell * 0.3)
-      ctx.lineTo(px + cell * 0.36, py + cell * 0.64)
-      ctx.lineTo(px + cell * 0.62, py + cell * 0.64)
+      ctx.moveTo(px + cell * 0.4, py + cell * 0.36)
+      ctx.lineTo(px + cell * 0.4, py + cell * 0.6)
+      ctx.lineTo(px + cell * 0.58, py + cell * 0.6)
       ctx.stroke()
-      hx.strokeStyle = '#5a5a5a'
-      hx.lineWidth = 4
+      hx.strokeStyle = '#686868'
+      hx.lineWidth = 3
       hx.lineCap = 'round'
       hx.beginPath()
-      hx.moveTo(px + cell * 0.36, py + cell * 0.3)
-      hx.lineTo(px + cell * 0.36, py + cell * 0.64)
-      hx.lineTo(px + cell * 0.62, py + cell * 0.64)
+      hx.moveTo(px + cell * 0.4, py + cell * 0.36)
+      hx.lineTo(px + cell * 0.4, py + cell * 0.6)
+      hx.lineTo(px + cell * 0.58, py + cell * 0.6)
       hx.stroke()
       hx.fillStyle = '#6a6a6a'
       hx.fillRect(px, py, cell, 2)

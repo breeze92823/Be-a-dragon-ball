@@ -24,26 +24,27 @@ build (`src/safezone/`, numbers in `SAFE_ZONE` in `src/config.js`). Metres,
 
 ## Top-down layout
 
+Hub 120 x 90 m (x -60..60, z -40..50), packed like the screenshots: bases
+side by side, shops on the sand edge, boards on the side walls.
+
 ```
-                         DESERT (lane, built later)  z -52 .. -130
+                         DESERT (lane, built later)  z -40 .. -118
         event bldg        pyramids, cacti, rocks, logs     pyramids
                               ||  red carpet lane  ||
- z=-52 ======================[  lane exit x=0   ]========================== sand edge
- W  Sell   Dragon   Orb         S A F E   Z O N E        Tread-  Cash   Base   Fuse     E
- A  stall  Spin     Shop      (shield)        (shield)   mill    Shop   Skins  Machine  A
- L  x-56   x-40     x-24                                 x20     x35    x49    x60      S
- L                                                                                      T
-    Top Rebirth  z-30                                                 Top Money  z-26   W
-    Free Reward  z-20                     SPAWN (0,4)                 Next Update z-17  A
-    Top Playtime z-8                         |                        Top Speed  z-8    L
-                                             v faces north                              L
-                                                                      Orb Pack   z 3
-                                                                      Suggestions z 13
- z=24 ---- base fronts (entrances face north) ------------------------------------------
-     [ L4 ]   [ L2 ]   [empty]   [YOU L1]   [ L3 ]   [empty]      20 x 30 plots
-     x-55     x-33     x-11      x11        x33      x55
- z=54 ---- base backs, stair zone behind -------------------------------------------------
- z=62 ===================== south wall ===================================================
+ z=-40 ======================[  lane exit x=0   ]========================== sand edge
+ W  Sell   Dragon   Orb                                   Tread-  Cash  Base   Fuse    E
+ A  x-50   Spin     Shop                                  mill    Shop  Skins  Mach.   A
+ L         x-37     x-23    (shields) SAFE ZONE (z-23)    x17     x29   x40.5  x50     S
+ L  Top Rebirth  z-24                                            Top Money   z-20    T
+    Free Reward  z-13                                            Next Update z-11    W
+    Top Playtime z-2           SPAWN (0,2) faces north           Top Speed   z-2     A
+                                                                 Orb Pack    z 5     L
+                                                                 Suggestions z 11.5  L
+ z=16 ---- base fronts (entrances face north) -------------------------------------------
+     [ L4 ] [ L2 ] [empty] [YOU L1] [ L3 ] [empty]        18 x 26 plots, 1 m apart
+     x-47.5 x-28.5 x-9.5   x9.5     x28.5  x47.5
+ z=42 ---- base backs, stair landings to z 48 ----------------------------------------------
+ z=50 ===================== south wall ======================================================
 ```
 
 ## Naming / rules applied

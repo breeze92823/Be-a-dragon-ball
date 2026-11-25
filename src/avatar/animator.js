@@ -5,7 +5,7 @@
 // stay planted at any speed. Writes only to bones and the avatar root's
 // rotation / position.y (the player group owns world placement).
 import { ANIM } from '../config.js'
-import { PlayerRig, PoseBuffer } from './rig.js'
+import { BONE_INDEX, PlayerRig, PoseBuffer } from './rig.js'
 
 const TAU = Math.PI * 2
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v)
@@ -44,6 +44,7 @@ class PlayerAnimator {
     this.idleTime = 0
     this.airTime = 0
     this.bank = 0
+    this.carry = 0 // 0..1 eased weight of the carrying-in-front arm pose
   }
 
   dispose() {
@@ -52,13 +53,15 @@ class PlayerAnimator {
     this.root.position.y = 0
   }
 
-  // input: { grounded, speed, verticalVelocity, turn (-1..1) }
+  // input: { grounded, speed, verticalVelocity, turn (-1..1), carry (bool: arms hold an item in front) }
   update(dt, input) {
     if (!(dt > 0)) return
     this.stateTime += dt
     this.resolveState(dt, input)
     this.writePose(dt, input)
     this.blend(dt)
+    this.carry += ((input.carry ? 1 : 0) - this.carry) * (1 - Math.exp(-10 * dt))
+    if (this.carry > 0.002) this.applyCarry(this.carry)
     this.rig.applyPose(this.output)
     this.applyVisual(dt, input)
   }
@@ -172,6 +175,19 @@ class PlayerAnimator {
       if (t >= 1) this.blendDuration = 0
     } else {
       this.output.copyFrom(this.target)
+    }
+  }
+
+  // Both arms reach forward and in, elbows bent, as if hugging an item to the chest;
+  // a trace of the walk swing is kept so the carry still reads as walking.
+  applyCarry(w) {
+    const v = this.output.rotations
+    const C = ANIM.carry
+    for (const [bone, pose] of Object.entries(C)) {
+      const at = BONE_INDEX[bone] * 3
+      v[at] = lerp(v[at], (pose.x ?? 0) + v[at] * 0.15, w)
+      v[at + 1] = lerp(v[at + 1], pose.y ?? 0, w)
+      v[at + 2] = lerp(v[at + 2], pose.z ?? 0, w)
     }
   }
 

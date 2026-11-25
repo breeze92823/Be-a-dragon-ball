@@ -217,11 +217,17 @@ export function paintLines(ctx, lines, w) {
   }
 }
 
+// Floating name labels (fighters, base owners) live on this camera layer so the Settings
+// window's Overhead Name Toggle hides them all at no cost (camera.layers, ui/settings.js).
+export const OVERHEAD_LAYER = 3
+export const markOverhead = (obj) => obj.layers.set(OVERHEAD_LAYER)
+
 export class LabelBatch extends Atlas {
-  constructor(scene, { far = 90, size = 2048 } = {}) {
+  constructor(scene, { far = 90, size = 2048, overhead = false } = {}) {
     super(size)
     this.scene = scene
     this.far = far
+    this.overhead = overhead
     this.quads = new Map() // page -> arrays
     this.meshes = []
   }
@@ -262,6 +268,7 @@ export class LabelBatch extends Atlas {
       const m = new Mesh(g, mat)
       m.frustumCulled = false // quads are expanded in the shader; centres alone would cull wrongly
       m.renderOrder = 3
+      if (this.overhead) markOverhead(m)
       this.scene.add(m)
       this.meshes.push(m)
     }
@@ -281,6 +288,7 @@ export class DynLabel {
     this.sprite = new Sprite(new SpriteMaterial({ map: this.texture, transparent: true, depthWrite: false, toneMapped: false, fog: false }))
     this.sprite.scale.set((height * pw) / ph, height, 1)
     this.sprite.renderOrder = 3
+    markOverhead(this.sprite) // floating text over a fighter / spot (plane() text stays on layer 0)
     this.value = null
   }
   // A fixed plane (facing +Z) showing the same canvas, for text mounted on a model.

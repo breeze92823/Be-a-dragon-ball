@@ -1,19 +1,33 @@
-import { ACESFilmicToneMapping, Clock, Group, PCFSoftShadowMap, PerspectiveCamera, Scene, SRGBColorSpace, WebGLRenderer } from 'three'
-import { CAMERA, graphicsPreset, RENDER } from './config.js'
+import { ACESFilmicToneMapping, Clock, Group, PCFSoftShadowMap, PerspectiveCamera, Scene, SRGBColorSpace, Vector3, WebGLRenderer } from 'three'
+import { BASE, CAMERA, graphicsPreset, RENDER, SAFE_ZONE } from './config.js'
 import * as bloxity from './bloxity.js'
 import { install as installInput, onKey } from './input.js'
 import { installTouch } from './touch.js'
 import { createPlayerBody, interpolate as interpolatePlayer, player, resetPlayer, respawn } from './player.js'
 import { setCameraSensitivity, syncYawToPlayer, update as updateCamera } from './camera.js'
-import { onModeChanged, toggleMode } from './modes.js'
+import { isFirstPerson, onModeChanged, toggleMode } from './modes.js'
 import { bodyCount, initPhysics, stepPhysics } from './physics.js'
 import { createLighting } from './lighting.js'
-import { buildGround, createWorld, landColliders } from './world.js'
+import { createWorld } from './world.js'
+import { buildSafeZone } from './safezone/index.js'
+import { setParticleDensity, updateParticles } from './particles.js'
+import { installAudio, updateAudio } from './audio/index.js'
 import { createPostFx } from './postfx.js'
 import { setNeonBloom } from './propkit.js'
 import { buildDefaultCharacter, loadBaseCharacter } from './avatar/character.js'
 import { applyProportions, attachEquippedAccessories } from './avatar/loader.js'
 import { disposeAnimator, makeAnimator } from './avatar/animator.js'
+import { installFx, updateFx } from './fx.js'
+import { createHud } from './hud/hud.js'
+import { createLane } from './lane/index.js'
+import { createMyBase } from './base/mybase.js'
+import { initUi } from './ui/index.js'
+import { load as loadProgress, state, tickSave, changed, addFighter } from './state.js'
+import { makeFighter, rosterFor } from './roster.js'
+// --- Treadmill / Backpack / Net (imports) ---
+import { createTreadmill } from './treadmill.js'
+import { createBackpack } from './backpack.js'
+import { initNet } from './net.js'
 
 // Boot order: Bloxity SDK -> renderer -> Rapier (async wasm) -> ground + sky + lighting,
 // player body -> avatar (async, swaps in when ready) -> loop. The SDK is optional at every step.
@@ -32,6 +46,7 @@ function applySetting(key, value) {
     lighting?.setShadows(next)
     postfx?.configure(next)
     setNeonBloom(next.bloom)
+    setParticleDensity(next.particles)
     postfx?.setSize(window.innerWidth, window.innerHeight)
   }
 }
@@ -71,10 +86,12 @@ bloxity.loadingStep('Starting physics')
 await initPhysics()
 
 lighting = createLighting(scene, renderer, preset)
-const world = createWorld(scene) // the sea and clouds
-buildGround(scene)
-landColliders()
+const world = createWorld(scene) // clouds
+bloxity.loadingStep('Building the safe zone')
+const safeZone = await buildSafeZone(scene)
+installFx(scene)
 createPlayerBody()
+installAudio()
 syncYawToPlayer()
 
 // --- Player avatar ----------------------------------------------------------
@@ -97,6 +114,37 @@ function setAvatar(next) {
 }
 
 setAvatar(buildDefaultCharacter()) // visible immediately; replaced once the rig loads
+
+// --- Lane, your base, HUD -------------------------------------------------------
+// Shop / Base / Sell teleport you to those spots in the safe zone (facing in).
+function teleportTo(where) {
+  const shop = (id) => SAFE_ZONE.shops.find((s) => s.id === id)
+  const home = safeZone.homeZone
+  const to =
+    where === 'base' && home ? { x: home.x, z: home.z - home.hd - 3, facing: 0 } :
+    where === 'sell' ? { x: shop('sell').x, z: shop('sell').z + 5, facing: Math.PI } :
+    { x: shop('treadmill').x, z: shop('treadmill').z + 6, facing: Math.PI }
+  resetPlayer({ x: to.x, y: 0.05, z: to.z }, to.facing)
+  syncYawToPlayer()
+}
+loadProgress()
+const hud = createHud({ renderer, onTeleport: teleportTo })
+const lane = createLane(scene, { hud, playerGroup, getAvatar: () => avatar })
+const myBase = createMyBase(scene, safeZone.mySlots.slice(0, BASE.slots), { hud })
+// --- Treadmill / Backpack / Net ---
+// Treadmill: the HUD's Treadmill button (or T) trains Speed in the safe zone. Backpack: the bag
+// button opens the fighter inventory over the hotbar. Net: progress loads from / saves to the
+// game server only (state.tickSave sends it).
+const treadmill = createTreadmill(scene, { hud, camera, renderer })
+createBackpack({ hud, renderer })
+initNet()
+// Windows (src/ui/): Index, Rebirth, Quests, Playtime + Daily Rewards, Settings, x2 Speed.
+const ui = initUi({ hud, renderer, camera, applySetting, portalQuality: () => bloxity.settings.graphics_quality })
+// Respawning (R, touch, portal) while out on the lane loses the orb run / the fighter.
+const respawnAll = () => {
+  lane.onRespawn()
+  respawn()
+}
 
 async function loadAvatar() {
   // The SDK fires twice per change (optimistic + confirmed); only the newest load may land.
@@ -124,7 +172,7 @@ bloxity.subscribeAuth((s) => {
 })
 bloxity.onAvatarChanged(loadAvatar)
 bloxity.onProportionsChanged(() => applyProportions(avatar, bloxity.getProportions()))
-bloxity.onRespawnRequest(respawn)
+bloxity.onRespawnRequest(respawnAll)
 
 // --- Modes + keys --------------------------------------------------------------
 onModeChanged((mode) => {
@@ -132,12 +180,17 @@ onModeChanged((mode) => {
 })
 onKey('KeyV', toggleMode)
 onKey('KeyN', () => lighting.toggleDayNight())
-onKey('KeyR', respawn)
-installTouch({ mode: toggleMode, day: () => lighting.toggleDayNight(), respawn })
+onKey('KeyR', respawnAll)
+installTouch({ mode: toggleMode, day: () => lighting.toggleDayNight(), respawn: respawnAll })
 
 // --- Loop -------------------------------------------------------------------
 const clock = new Clock()
+const audioState = { camera, player: { x: 0, y: 0, z: 0, vy: 0, grounded: true, speed: 0 }, surface: 'plastic', inDesert: false, fuse: safeZone.fuse }
 let shownLoading = true
+const cinePos = new Vector3()
+const cineLook = new Vector3()
+const chaseLook = new Vector3()
+let cineBlend = 0
 let readySince = 0
 
 renderer.setAnimationLoop(() => {
@@ -150,15 +203,63 @@ renderer.setAnimationLoop(() => {
   const p = player.renderPosition
   playerGroup.position.set(p.x, p.y, p.z)
   playerGroup.rotation.y = player.facing
+  if (avatar) avatar.visible = lane.form === 'human' // orb / fighter forms replace the avatar
   animator?.update(dt, {
     grounded: player.grounded,
     speed: Math.hypot(player.velocity.x, player.velocity.z),
     verticalVelocity: player.velocity.y,
     turn: 0,
+    carry: lane.carrying,
   })
 
+  lane.update(dt, elapsed, p, isFirstPerson())
+  myBase.update(dt, elapsed, p, lane.form)
+  treadmill.update(dt, elapsed) // --- Treadmill ---
   updateCamera(camera, dt)
+  // Carried / hatching: ease to the lane's cinematic shot through the base's open front.
+  const cine = lane.cinematic
+  cineBlend += ((cine ? 1 : 0) - cineBlend) * (1 - Math.exp(-3 * dt))
+  if (cine) {
+    const k = 1 - Math.exp(-4 * dt)
+    cinePos.x += (cine.x - cinePos.x) * k
+    cinePos.y += (cine.y - cinePos.y) * k
+    cinePos.z += (cine.z - cinePos.z) * k
+    cineLook.x += (cine.lx - cineLook.x) * k
+    cineLook.y += (cine.ly - cineLook.y) * k
+    cineLook.z += (cine.lz - cineLook.z) * k
+  } else if (cineBlend < 0.01) {
+    cinePos.copy(camera.position)
+    camera.getWorldDirection(cineLook).multiplyScalar(10).add(camera.position)
+  }
+  if (cineBlend > 0.01) {
+    camera.getWorldDirection(chaseLook).multiplyScalar(10).add(camera.position)
+    camera.position.lerp(cinePos, cineBlend)
+    camera.lookAt(chaseLook.lerp(cineLook, cineBlend))
+  }
+  // Guardian stomps / roars / grabs shake the camera a little.
+  const shake = lane.shake
+  if (shake > 0.01) {
+    camera.position.x += (Math.random() - 0.5) * shake * 0.5
+    camera.position.y += (Math.random() - 0.5) * shake * 0.5
+    camera.position.z += (Math.random() - 0.5) * shake * 0.5
+  }
   world.update(dt, elapsed)
+  safeZone.update(dt, elapsed, p)
+  updateParticles(elapsed, renderer.domElement.height)
+  updateFx(dt, renderer.domElement.height)
+  hud.update(dt, camera)
+  ui.update(dt)
+  tickSave(dt)
+  const speed = Math.hypot(player.velocity.x, player.velocity.z)
+  audioState.player.x = p.x
+  audioState.player.y = p.y
+  audioState.player.z = p.z
+  audioState.player.vy = player.velocity.y
+  audioState.player.grounded = player.grounded
+  audioState.player.speed = speed
+  audioState.surface = safeZone.surfaceAt(p)
+  audioState.inDesert = safeZone.inDesert
+  updateAudio(dt, audioState)
   lighting.update(dt, playerGroup.position)
   postfx.render()
 
@@ -180,5 +281,18 @@ if (import.meta.env.DEV) {
     resetPlayer({ x, y, z }, facing)
     syncYawToPlayer()
   }
-  window.__game = { player, scene, renderer, camera, postfx, bodies: bodyCount, toggleMode, teleport }
+  const setSpeed = (n) => {
+    state.speed = n
+    changed()
+  }
+  const giveMoney = (n) => {
+    state.money += n
+    changed()
+  }
+  // e.g. __game.giveFighter('Rare') puts a roster fighter in your hands
+  const giveFighter = (rarity = 'Common') => {
+    const list = rosterFor(rarity)
+    addFighter(makeFighter(list[Math.floor(Math.random() * list.length)], state.nextId++))
+  }
+  window.__game = { player, scene, renderer, camera, postfx, bodies: bodyCount, toggleMode, teleport, safeZone, lane, state, setSpeed, giveMoney, giveFighter, hud }
 }

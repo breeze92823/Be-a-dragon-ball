@@ -12,7 +12,7 @@ const GI = ['#ff7a1a', '#1f5ed8', '#7b3fe0', '#2bb04a', '#d8262e', '#f4f4f4', '#
 const PANTS = ['#1f5ed8', '#ff7a1a', '#20283c', '#f4f4f4', '#6b3a1e', '#7b3fe0']
 const HAIR = ['#111318', '#111318', '#ffd23a', '#ffe76a', '#4fd3ff', '#ff5fb1', '#f4f4f4', '#8a5bff', '#2b2b2b', '#c43b2b']
 const SKIN = ['#f2c79a', '#e8b384', '#c98d5c', '#8fd16a', '#b6c3ff', '#f7d7b4']
-const NAMES = ['Kairo', 'Zenbu', 'Rokka', 'Tamo', 'Veltra', 'Gorin', 'Shiro', 'Brakk', 'Nimbo', 'Koda', 'Yuzan', 'Raiko', 'Senji', 'Ozuru', 'Fenn', 'Juro', 'Mako', 'Tessa', 'Ryn', 'Haku', 'Dorun', 'Lumo', 'Kenta', 'Saru', 'Voltan', 'Iza', 'Gryn', 'Pako']
+export const NAMES = ['Kairo', 'Zenbu', 'Rokka', 'Tamo', 'Veltra', 'Gorin', 'Shiro', 'Brakk', 'Nimbo', 'Koda', 'Yuzan', 'Raiko', 'Senji', 'Ozuru', 'Fenn', 'Juro', 'Mako', 'Tessa', 'Ryn', 'Haku', 'Dorun', 'Lumo', 'Kenta', 'Saru', 'Voltan', 'Iza', 'Gryn', 'Pako']
 
 export function fighterLook(rand) {
   const p = (a) => a[Math.floor(rand() * a.length)]
@@ -70,11 +70,17 @@ export function buildFighter(parent, look, x, y, z, yaw = 0, scale = 1, mat = nu
   const white = mat ?? M('#ffffff', { rough: 0.4 })
 
   // Legs + boots (boots stick out past the trouser legs on every side: no shared faces).
+  // Each leg hangs from a hip pivot so an animated fighter (lane) can swing it.
+  const rig = { legs: [], arms: [], root: g }
   for (const s of [-1, 1]) {
-    box(g, boots, 0.36, 0.28, 0.5, s * 0.2, 0, 0.04)
-    box(g, boots, 0.38, 0.08, 0.52, s * 0.2, 0.28, 0.04) // boot cuff
-    box(g, pants, 0.33, 0.66, 0.36, s * 0.2, 0.3, 0)
-    box(g, pants, 0.35, 0.18, 0.38, s * 0.2, 0.62, 0) // baggy knee
+    const leg = new Group()
+    leg.position.set(s * 0.2, 0.92, 0)
+    g.add(leg)
+    rig.legs.push(leg)
+    box(leg, boots, 0.36, 0.28, 0.5, 0, -0.92, 0.04)
+    box(leg, boots, 0.38, 0.08, 0.52, 0, -0.64, 0.04) // boot cuff
+    box(leg, pants, 0.33, 0.66, 0.36, 0, -0.62, 0)
+    box(leg, pants, 0.35, 0.18, 0.38, 0, -0.3, 0) // baggy knee
   }
   // Hips + belt with a knot.
   box(g, pants, 0.78, 0.22, 0.42, 0, 0.92, 0)
@@ -96,7 +102,9 @@ export function buildFighter(parent, look, x, y, z, yaw = 0, scale = 1, mat = nu
     const a = new Group()
     a.position.set(s * shoulderX, 1.82, 0)
     a.rotation.set(swingX, 0, s * swingZ)
+    a.userData.rest = { x: swingX, z: s * swingZ, side: s }
     g.add(a)
+    rig.arms.push(a)
     boxC(a, gi, 0.3, 0.38, 0.32, 0, -0.17, 0) // sleeve
     const fore = new Group()
     fore.position.set(0, -0.36, 0)
@@ -105,6 +113,8 @@ export function buildFighter(parent, look, x, y, z, yaw = 0, scale = 1, mat = nu
     boxC(fore, skin, 0.24, 0.36, 0.26, 0, -0.17, 0)
     boxC(fore, m('#d8262e'), 0.28, 0.12, 0.3, 0, -0.3, 0) // wristband
     boxC(fore, skin, 0.27, 0.22, 0.27, 0, -0.46, 0) // fist
+    a.userData.fore = fore
+    fore.userData.rest = elbow
   }
   if (look.stance === 0) {
     arm(-1, 0.55, deg(-50), deg(12), deg(-80))
@@ -143,5 +153,6 @@ export function buildFighter(parent, look, x, y, z, yaw = 0, scale = 1, mat = nu
     box(g, m('#d8262e'), 0.08, 0.3, 0.04, 0.1, 2.12, -0.29, 0, deg(12), deg(14))
     spikes([[-0.14, 2.64, 0.05, 10, 20], [0.14, 2.64, 0.05, 10, -20], [0, 2.66, -0.12, -20, 0]], 0.13, 0.32)
   }
+  g.userData.rig = rig
   return g
 }

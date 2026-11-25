@@ -1,5 +1,5 @@
 import { DodecahedronGeometry, Group } from 'three'
-import { SAFE_ZONE } from '../config.js'
+import { LANE, SAFE_ZONE } from '../config.js'
 import { mulberry32 } from '../textures.js'
 import { M, S, box, cyl, cylC, mesh, bakeInto, solid, deg } from './kit.js'
 import { strokeText, DynLabel } from './text.js'
@@ -41,7 +41,10 @@ export function buildGround(scene, signs) {
   wallRun(WT, fullD, maxX + WT / 2, midZ)
   wallRun(WT, fullD, minX - WT / 2, midZ)
   wallRun(hubW, WT, 0, maxZ + WT / 2, true) // south (ends tucked inside the side walls)
-  wallRun(hubW, WT, 0, Z.desertEnd - WT / 2, true) // far end of the desert
+  // Far end of the desert: two runs either side of the opening into the lane corridors.
+  const gap = LANE.corridor.width
+  const piece = (hubW - gap) / 2
+  for (const s of [-1, 1]) wallRun(piece, WT, s * (gap / 2 + piece / 2), Z.desertEnd - WT / 2, true)
   // Low sand bank where the green meets the sand (reads as the hub's edge).
   for (const s of [-1, 1]) {
     const len = hubW / 2 - Z.laneExit.width / 2 - 1
@@ -51,12 +54,12 @@ export function buildGround(scene, signs) {
   // --- Red carpet out of the hub, down the lane ---
   const lane = Z.laneExit
   box(g, S(C.carpet, { rough: 0.9 }), lane.width, 0.06, minZ - Z.desertEnd, lane.x, 0, (minZ + Z.desertEnd) / 2)
-  for (const s of [-1, 1]) box(g, M('#ffd23a', { rough: 0.35, metal: 0.4 }), 0.22, 0.1, minZ - Z.desertEnd, lane.x + s * (lane.width / 2 + 0.11), 0, (minZ + Z.desertEnd) / 2)
+  for (const s of [-1, 1]) box(g, M('#ffd23a', { rough: 0.35, metal: 0.2 }), 0.22, 0.1, minZ - Z.desertEnd, lane.x + s * (lane.width / 2 + 0.11), 0, (minZ + Z.desertEnd) / 2)
   // Red carpet strip in the sand along the shops (screenshots 2, 3, 17).
   box(g, S(C.carpet, { rough: 0.9 }), hubW - 30, 0.05, 4, 0, 0, minZ - 5)
 
   // --- SAFE ZONE text painted across the hub edge, a shield at each end ---
-  signs.plane(g, 30, 5.2, 1500, 260, paintSafeZone, lane.x, 0.03, lane.textZ, 0, -Math.PI / 2)
+  signs.plane(g, 40, 7, 1600, 280, paintSafeZone, lane.x, 0.03, lane.textZ, 0, -Math.PI / 2)
 
   // --- Desert dressing ---
   const rand = mulberry32(77)
@@ -69,10 +72,12 @@ export function buildGround(scene, signs) {
       solid(w / 2, 0.8, w / 2, x, i * 1.6 + 0.8, z, ry)
     }
   }
-  pyramid(34, -92, 16, 7, deg(10))
-  pyramid(58, -70, 10, 5, deg(-20))
-  pyramid(-18, -112, 13, 6, deg(32))
-  pyramid(18, -122, 9, 4, 0)
+  const dz = Z.hub.minZ // desert dressing is placed relative to the hub edge
+  const span = Z.hub.minZ - Z.desertEnd
+  pyramid(34, dz - 52, 16, 7, deg(10))
+  pyramid(47, dz - 22, 10, 5, deg(-20))
+  pyramid(-16, dz - 60, 13, 6, deg(32))
+  pyramid(16, dz - 70, 9, 4, 0)
 
   const cactus = (x, z, h, ry) => {
     const green = S('#33b23a', { rough: 0.65 })
@@ -90,10 +95,12 @@ export function buildGround(scene, signs) {
     solid(0.6, h / 2, 0.6, x, h / 2, z)
   }
   for (let i = 0; i < 16; i++) {
-    const x = (rand() * 2 - 1) * 62
-    const z = Z.hub.minZ - 14 - rand() * 70
+    const x = (rand() * 2 - 1) * (Z.hub.maxX - 8)
+    const z = dz - 14 - rand() * (span - 22)
     if (Math.abs(x - lane.x) < 9) continue
     if (Math.hypot(x - Z.eventBuilding.x, z - Z.eventBuilding.z) < 13) continue
+    if (x > 12 && x < 36 && z < -48 && z > -80) continue // the Mummy Warrior's base
+    if (Math.abs(x) < 36 && z < Z.desertEnd + 6) continue // the opening into the lane
     cactus(x, z, 3.5 + rand() * 3, rand() * Math.PI)
   }
 
@@ -112,18 +119,18 @@ export function buildGround(scene, signs) {
     }
     solid(len / 2, r, r, x, r * 0.9, z, ry)
   }
-  log(-7, -66, 5, 1, deg(80))
-  log(9, -64, 4, 0.9, deg(-10))
-  log(24, -70, 4.5, 0.95, deg(35))
-  log(-28, -66, 4, 0.9, deg(70))
-  log(44, -68, 3.6, 0.85, deg(-50))
+  log(-7, dz - 14, 5, 1, deg(80))
+  log(9, dz - 12, 4, 0.9, deg(-10))
+  log(-26, dz - 14, 4, 0.9, deg(70))
+  log(40, dz - 16, 3.6, 0.85, deg(-50))
 
   const rockGeo = new DodecahedronGeometry(1, 0)
   const rock = M('#8b9cc9', { rough: 0.85, flat: true })
   for (let i = 0; i < 14; i++) {
-    const x = (rand() * 2 - 1) * 64
-    const z = Z.hub.minZ - 10 - rand() * 70
+    const x = (rand() * 2 - 1) * (Z.hub.maxX - 6)
+    const z = dz - 10 - rand() * (span - 16)
     if (Math.abs(x - lane.x) < 7) continue
+    if (x > 12 && x < 36 && z < -48 && z > -80) continue
     const s = 0.8 + rand() * 1.6
     const r = mesh(g, rockGeo, rock, x, s * 0.3, z, rand() * 6, rand() * 6)
     r.scale.set(s * 1.4, s * 0.8, s * 1.1)
@@ -150,7 +157,7 @@ export function buildGround(scene, signs) {
     // Front: glass panes between orange mullions.
     for (let i = 0; i < 3; i++) {
       const cx = -W / 3 + (i * W) / 3
-      box(eg, glass, W / 3 - 1, H - 2.4, 0.12, cx, y + 1.2, D / 2 - 0.2)
+      box(eg, glass, W / 3 - 0.3, H - 2.4, 0.12, cx, y + 1.2, D / 2 - 0.2) // edges tuck into the mullions
       box(eg, orange, 0.4, H - 0.8, 0.5, cx + W / 6, y, D / 2 - 0.2)
     }
     box(eg, orange, W, 0.5, 0.6, 0, y + 0.6, D / 2 - 0.2) // sill
@@ -186,11 +193,13 @@ export function buildGround(scene, signs) {
   }
 }
 
-// SAFE ZONE in chunky white letters with a navy drop and a cyan shield at each end.
+// SAFE ZONE in chunky white letters with a deep navy extrusion and a cyan
+// shield at each end (navy rim + white edge so it reads against the grass).
 function paintSafeZone(ctx, w, h) {
   const shield = (cx) => {
     ctx.save()
     ctx.translate(cx, h / 2)
+    ctx.scale(1.18, 1.18)
     ctx.beginPath()
     ctx.moveTo(0, -96)
     ctx.bezierCurveTo(52, -86, 84, -76, 92, -70)
@@ -198,26 +207,30 @@ function paintSafeZone(ctx, w, h) {
     ctx.bezierCurveTo(-60, 70, -92, 10, -92, -70)
     ctx.bezierCurveTo(-84, -76, -52, -86, 0, -96)
     ctx.closePath()
-    ctx.lineWidth = 16
+    ctx.lineJoin = 'round'
+    ctx.lineWidth = 30
+    ctx.strokeStyle = '#0b1a3a'
+    ctx.stroke()
+    ctx.lineWidth = 14
     ctx.strokeStyle = '#ffffff'
     ctx.stroke()
     const gr = ctx.createLinearGradient(-90, -90, 90, 100)
-    gr.addColorStop(0, '#7af4ff')
-    gr.addColorStop(1, '#14a9e8')
+    gr.addColorStop(0, '#9af8ff')
+    gr.addColorStop(1, '#0f9be0')
     ctx.fillStyle = gr
     ctx.fill()
     ctx.beginPath()
-    ctx.moveTo(0, -70)
-    ctx.lineTo(0, 76)
-    ctx.moveTo(-64, -44)
-    ctx.lineTo(0, -44)
-    ctx.lineWidth = 10
-    ctx.strokeStyle = 'rgba(255,255,255,0.45)'
+    ctx.moveTo(-60, -60)
+    ctx.quadraticCurveTo(-58, 20, -6, 70)
+    ctx.lineWidth = 12
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'
     ctx.stroke()
     ctx.restore()
   }
-  shield(110)
-  shield(w - 110)
-  for (let i = 10; i > 0; i -= 2) strokeText(ctx, 'SAFE ZONE', w / 2, h / 2 + i, 190, '#0b1a3a', { outline: '#0b1a3a', ow: 26 })
-  strokeText(ctx, 'SAFE ZONE', w / 2, h / 2, 190, '#ffffff', { outline: '#0b1a3a', ow: 26 })
+  shield(140)
+  shield(w - 140)
+  const px = 214
+  const y = h / 2 - 6
+  for (let i = 18; i > 0; i -= 2) strokeText(ctx, 'SAFE ZONE', w / 2, y + i, px, '#0b1a3a', { outline: '#0b1a3a', ow: 34, maxW: w - 380 })
+  strokeText(ctx, 'SAFE ZONE', w / 2, y, px, ['#ffffff', '#cfefff'], { outline: '#0b1a3a', ow: 34, maxW: w - 380 })
 }

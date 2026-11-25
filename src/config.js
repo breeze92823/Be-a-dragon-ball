@@ -11,12 +11,12 @@ export const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true'
 export const GROUND_Y = 0
 // The safe zone (src/safezone/, map in SAFE_ZONE.md): a green studded hub walled on three
 // sides, the desert lane to the north (-Z). Spawn in the middle facing the shop row.
-export const SPAWN = { x: 0, y: 0.05, z: 4 }
+export const SPAWN = { x: 0, y: 0.05, z: 2 }
 export const SPAWN_FACING = Math.PI // yaw the character faces on spawn (PI = toward -Z)
 
 export const SAFE_ZONE = {
-  hub: { minX: -70, maxX: 70, minZ: -52, maxZ: 62 }, // the green safe area (inner faces of the walls)
-  desertEnd: -132, // z of the far wall of the sand
+  hub: { minX: -60, maxX: 60, minZ: -40, maxZ: 50 }, // the green safe area (inner faces of the walls)
+  desertEnd: -118, // z of the far wall of the sand
   wall: { height: 16, thick: 4 },
   tile: 8, // m per stud texture tile (UV unit of every studded surface)
   colors: {
@@ -25,51 +25,51 @@ export const SAFE_ZONE = {
     wall: '#d8a35e',
     carpet: '#e3141b',
     base: '#cfc8f2',
-    baseTrim: '#2fe3ff',
-    pillar: '#ffa6dd',
+    baseTrim: '#1fe6ff',
+    pillar: '#ff8cc6', // bubblegum pink (sky light + tone mapping wash paler pinks out to lilac)
     cap: '#ffffff',
     board: '#3d7ff2',
     boardDark: '#2453c7',
     emptyPlot: '#a8d8ff',
   },
-  laneExit: { x: 0, width: 7, textZ: -45 }, // SAFE ZONE text runs along the hub edge here
+  laneExit: { x: 0, width: 7, textZ: -23 }, // SAFE ZONE text runs along the hub edge here
   // Shop row on the green, just inside the sand edge. pad = ring pad colour, r = pad radius.
   shops: [
-    { id: 'sell', title: 'Sell', x: -56, z: -42, pad: '#ff5fb1', r: 3.2, note: 'Sell your fighters here' },
-    { id: 'spin', title: 'Dragon Spin', x: -40, z: -42, pad: '#7dff5a', r: 4.6, note: 'Free spin every 15 minutes' },
-    { id: 'orbs', title: 'Orb Shop', x: -24, z: -42, pad: '#ffe14a', r: 5, note: 'Orb Shop opens soon' },
-    { id: 'treadmill', title: 'Treadmill Shop', x: 20, z: -42, pad: '#33f1ff', r: 4.2, note: 'Treadmill Shop opens soon' },
-    { id: 'cash', title: 'Cash Shop', x: 35, z: -42, pad: '#b44dff', r: 5, note: 'Everything here costs $ only' },
-    { id: 'skins', title: 'Base Skins', x: 49, z: -42, pad: '#d8ff4a', r: 3.6, note: 'Equip base skins here' },
-    { id: 'fuse', title: 'Fuse Machine', x: 60, z: -40, pad: '#8f6bff', r: 0, note: 'Fuse 3 fighters into a stronger one' },
+    { id: 'sell', title: 'Sell', x: -50, z: -31, pad: '#ff5fb1', r: 3.2, note: 'Sell your fighters here' },
+    { id: 'spin', title: 'Dragon Spin', x: -37, z: -31, pad: '#7dff5a', r: 4.6, note: 'Free spin every 15 minutes' },
+    { id: 'orbs', title: 'Orb Shop', x: -23, z: -31, pad: '#ffe14a', r: 5, note: 'Orb Shop opens soon' },
+    { id: 'treadmill', title: 'Treadmill Shop', x: 17, z: -31, pad: '#33f1ff', r: 4.2, note: 'Treadmill Shop opens soon' },
+    { id: 'cash', title: 'Cash Shop', x: 29, z: -31, pad: '#b44dff', r: 5, note: 'Everything here costs $ only' },
+    { id: 'skins', title: 'Base Skins', x: 40.5, z: -31, pad: '#d8ff4a', r: 3.6, note: 'Equip base skins here' },
+    { id: 'fuse', title: 'Fuse Machine', x: 50, z: -30, pad: '#8f6bff', r: 0, note: 'Fuse 3 fighters into a stronger one' },
   ],
   // Boards on the side walls (side: 1 = east wall facing west, -1 = west wall facing east).
   boards: [
-    { id: 'money', side: 1, z: -26, title: 'Top Money', header: 'Most Money', titleColor: '#b7ff3d', unit: '$', suffix: '' },
-    { id: 'speed', side: 1, z: -8, title: 'Top Speed', header: 'Most Speed', titleColor: '#39d7ff', unit: '', suffix: ' Speed' },
-    { id: 'rebirth', side: -1, z: -30, title: 'Top Rebirth', header: 'Most Rebirth', titleColor: '#ffe14a', unit: '', suffix: ' Rebirths' },
-    { id: 'playtime', side: -1, z: -6, title: 'Top Playtime', header: 'Most Time Played', titleColor: '#ffffff', unit: '', suffix: '' },
+    { id: 'money', side: 1, z: -20, title: 'Top Money', header: 'Most Money', titleColor: '#b7ff3d', unit: '$', suffix: '' },
+    { id: 'speed', side: 1, z: -2, title: 'Top Speed', header: 'Most Speed', titleColor: '#39d7ff', unit: '', suffix: ' Speed' },
+    { id: 'rebirth', side: -1, z: -24, title: 'Top Rebirth', header: 'Most Rebirth', titleColor: '#ffe14a', unit: '', suffix: ' Rebirths' },
+    { id: 'playtime', side: -1, z: -2, title: 'Top Playtime', header: 'Most Time Played', titleColor: '#ffffff', unit: '', suffix: '' },
   ],
-  updateScreen: { side: 1, z: -17, nextUpdateHours: 70 }, // between Top Money and Top Speed
-  statue: { side: -1, z: -18 }, // Claim Free Reward statue on the west wall
-  orbPack: { x: 61, z: 3, price: '$25M' },
-  suggestions: { x: 63, z: 14 },
-  eventBuilding: { x: -46, z: -78, minutes: 4 },
+  updateScreen: { side: 1, z: -11, nextUpdateHours: 70 }, // between Top Money and Top Speed
+  statue: { side: -1, z: -13 }, // Claim Free Reward statue on the west wall
+  orbPack: { x: 54, z: 5, price: '$25M' },
+  suggestions: { x: 56, z: 11.5 },
+  eventBuilding: { x: -40, z: -66, minutes: 4 },
   // Player bases along the south side, entrances facing north. level 0 = empty plot.
   bases: {
-    frontZ: 24,
-    width: 20,
-    depth: 30,
+    frontZ: 16,
+    width: 18,
+    depth: 26,
     floorHeight: 7, // m between floors
     slotsPerSide: 5,
     fill: 0.62, // share of slots with a fighter in other players' bases
     plots: [
-      { x: -55, level: 4, owner: 'NovaBlitz', multi: 3 },
-      { x: -33, level: 2, owner: 'Mochi_Flash', multi: 1.5 },
-      { x: -11, level: 0 },
-      { x: 11, level: 1, owner: 'You', mine: true, multi: 1 },
-      { x: 33, level: 3, owner: 'PixelMonk', multi: 2 },
-      { x: 55, level: 0 },
+      { x: -47.5, level: 4, owner: 'NovaBlitz', multi: 3 },
+      { x: -28.5, level: 2, owner: 'Mochi_Flash', multi: 1.5 },
+      { x: -9.5, level: 0 },
+      { x: 9.5, level: 1, owner: 'You', mine: true, multi: 1 },
+      { x: 28.5, level: 3, owner: 'PixelMonk', multi: 2 },
+      { x: 47.5, level: 0 },
     ],
     upgrade: { price: '$500K', progress: '0/5' },
   },
@@ -87,11 +87,84 @@ export const RARITIES = [
   { name: 'Eternal', color: '#ff8a1f', income: [1e15, 3e16], aura: true },
   { name: 'Celestial', color: '#7af0ff', income: [5e16, 6e17], aura: true },
 ]
+RARITIES.push({ name: 'Divine', color: '#fff27a', income: [1e18, 9e18], aura: true }, { name: 'Primal', color: '#9cff4a', income: [2e19, 9e19], aura: true })
+
+// --- The lane (lane/, layout in LANE.md) ------------------------------------------------
+// Stepping off the green onto the sand turns the player into a winged orb. The
+// lane runs north (-Z) through 12 zones; each has a guardian asleep in its base.
+// The guardian wakes when the orb comes near: an orb whose Speed stat is at
+// least the zone's recommended speed outruns it, a slower one is caught,
+// carried into the base and hatched into a fighter of the zone's rarity, which
+// then has to run back to the safe zone before the angry guardian catches it.
+export const LANE = {
+  startSpeed: 2000, // Speed stat a new player starts with (treadmills raise it later)
+  // Speed stat -> m/s: base + perDecade * log10(1 + stat / 1000), capped.
+  speedCurve: { base: 8, perDecade: 6, max: 46 },
+  corridor: { width: 64, length: 90, wallHeight: 14 }, // zones after the desert
+  cullDistance: 380, // m: zone set pieces further than this are hidden
+  ball: { radius: 0.85, accel: 15, decel: 4.5, airAccel: 6, turnSpeed: 9, jumpSpeed: 7 },
+  character: { speed: 14, accel: 70, scale: 0.85 }, // the hatched fighter runs at sprint speed
+  guardian: {
+    height: 4.8, // m at scale 1
+    wakeRange: 46, // m from its seat at which an orb in its zone wakes it
+    wakeTime: 1.0, // s to stand up and roar
+    reach: 2.7, // m from the guardian's centre that counts as a catch
+    slowChase: 1.6, // x the orb's top speed when the orb is too slow (it gets caught)
+    fastChase: 0.82, // x the orb's top speed when the orb is fast enough (it escapes)
+    huntSpeed: 11, // m/s chasing a hatched fighter (the fighter runs at 14)
+    angryTime: 1.8, // s of rage on the slot before the hunt starts (the fighter's head start)
+    walkSpeed: 6.5, // m/s carrying / going home
+    leash: 16, // m past its zone's ends it keeps chasing
+  },
+  luckMax: 0.5, // luck multiplier grows from x1.0 at a zone's start to x1.5 at its end
+  hatchTime: 1.9, // s from the orb touching the slot to the fighter appearing
+  mutationChance: 0.12,
+  hotbarSlots: 10, // keys 1-9 then 0 (the rest go to the Backpack)
+}
+
+// Your base's slots (base/mybase.js): hold E to place the fighter in your hands on an
+// empty slot; it earns income/s into the slot's green pad, stepping on the pad collects it.
+export const BASE = {
+  slots: 10, // ground floor of a level 1 base: 5 per side
+  placeHold: 5, // s to hold E (or the prompt) to place a fighter
+  pickupHold: 1, // s to hold E to pick a placed fighter up (or swap it with the held one)
+  promptRange: 2.6, // m from a slot / upgrade sign at which its prompt shows
+  upgradeCost: 15, // upgrade price = income/s * upgradeCost * upgradeGrowth^(level-1)
+  upgradeGrowth: 1.8,
+  levelIncome: 0.5, // + this share of base income per level above 1
+  cashMulti: 1, // the base's cash multiplier (rebirths raise it later)
+}
+
+// Bar: [a, b] colours of the zone's segment on the top progress bar (or 'rainbow').
+// floor / wall / trim: the corridor; house: wall, pillar colours; guardian: name + look.
+export const ZONES = [
+  { name: 'Common', rarity: 'Common', rec: 2700, bar: ['#c8c8c8', '#eeeeee'], floor: '#f3d36d', wall: '#d8a35e', trim: '#c98f4c', props: 'desert', house: ['#ff9a1f', '#ffc83a'], guardian: { name: 'Mummy Warrior', wrap: '#eef4ff', wrap2: '#b9cbe8', eye: '#ff3030', angry: '#ff2a1a' } },
+  { name: 'Uncommon', rarity: 'Uncommon', rec: 8000, bar: ['#2fd25a', '#6cf08a'], floor: '#5fcf4a', wall: '#2f8a3a', trim: '#246b2c', props: 'jungle', house: ['#2bb04a', '#a6ff5a'], guardian: { name: 'Jungle Brute', wrap: '#8ed36a', wrap2: '#4f8f3a', eye: '#fff04a', angry: '#ff3a1a', horns: false } },
+  { name: 'Rare', rarity: 'Rare', rec: 25000, bar: ['#1f86ff', '#5fb8ff'], floor: '#cfefff', wall: '#5fb8ff', trim: '#2f7fd8', props: 'ice', house: ['#3f9bff', '#c8f4ff'], guardian: { name: 'Frost Giant', wrap: '#d8f6ff', wrap2: '#7fc8f0', eye: '#2af0ff', angry: '#ff2a3a' } },
+  { name: 'Epic', rarity: 'Epic', rec: 80000, bar: ['#7b3fe0', '#a774ff'], floor: '#b79cff', wall: '#5a2fb0', trim: '#3f1f86', props: 'crystal', house: ['#7b3fe0', '#d6a6ff'], guardian: { name: 'Void Golem', wrap: '#8a63d6', wrap2: '#4a2c8a', eye: '#ff5af0', angry: '#ff2a6a', horns: true } },
+  { name: 'Legendary', rarity: 'Legendary', rec: 250000, bar: ['#ffd23a', '#fff08a'], floor: '#ffe68a', wall: '#e0a81f', trim: '#b8840f', props: 'gold', house: ['#ffc21f', '#fff3a6'], guardian: { name: 'Golden Pharaoh', wrap: '#ffe27a', wrap2: '#c8962a', eye: '#3affff', angry: '#ff3a1a', crown: true } },
+  { name: 'Mythical', rarity: 'Mythical', rec: 800000, bar: ['#ff7a1a', '#ffa64a'], floor: '#4a3a3a', wall: '#2a2020', trim: '#ff6a1a', props: 'lava', house: ['#ff6a1a', '#ffb04a'], guardian: { name: 'Magma Ogre', wrap: '#5a3a30', wrap2: '#ff7a2a', eye: '#ffd23a', angry: '#ff2a00', horns: true } },
+  { name: 'Secret', rarity: 'Secret', rec: 2.5e6, bar: ['#c4141b', '#e8343a'], floor: '#3a1418', wall: '#8a1018', trim: '#e3141b', props: 'spikes', house: ['#c4141b', '#ff6a6a'], guardian: { name: 'Crimson Oni', wrap: '#d8343a', wrap2: '#7a1018', eye: '#ffffff', angry: '#ff0000', horns: true } },
+  { name: 'Eternal', rarity: 'Eternal', rec: 8e6, bar: ['#f4f4f4', '#9a9a9a'], floor: '#eeeef4', wall: '#b8b8c8', trim: '#8a8aa0', props: 'marble', house: ['#d8d8e8', '#ffffff'], guardian: { name: 'Silver Sentinel', wrap: '#e8ecf4', wrap2: '#9aa0b8', eye: '#4ab8ff', angry: '#ff2a3a', crown: true } },
+  { name: 'Divine', rarity: 'Divine', rec: 2.5e7, bar: 'rainbow', floor: '#fff8e8', wall: '#ff8ad8', trim: '#8ad8ff', props: 'rainbow', house: ['#ff5fb1', '#5fe0ff'], guardian: { name: 'Prism Titan', wrap: '#ffffff', wrap2: '#ffb0f0', eye: '#7a3aff', angry: '#ff2a8a', crown: true } },
+  { name: 'Heavenly', rarity: 'Heavenly', rec: 8e7, bar: ['#ffc2dc', '#ffe2ee'], floor: '#ffe0ec', wall: '#ff9ac8', trim: '#e86aa8', props: 'sakura', house: ['#ff8ac0', '#ffffff'], guardian: { name: 'Sakura Ronin', wrap: '#ffd0e4', wrap2: '#e870a8', eye: '#ff2a8a', angry: '#ff1a4a', horns: false } },
+  { name: 'Celestial', rarity: 'Celestial', rec: 2.5e8, bar: ['#1fb8ff', '#7af0ff'], floor: '#1a2a5a', wall: '#0f1a40', trim: '#7af0ff', props: 'space', house: ['#1f6bff', '#7af0ff'], guardian: { name: 'Sky Warden', wrap: '#9ae8ff', wrap2: '#2f6bd8', eye: '#ffffff', angry: '#ff3a3a', crown: true } },
+  { name: 'Primal', rarity: 'Primal', rec: 8e8, bar: ['#2bb04a', '#ffd23a'], floor: '#8a9a5a', wall: '#5a6a3a', trim: '#ffd23a', props: 'ruins', house: ['#6a8a3a', '#ffd23a'], guardian: { name: 'Elder Colossus', wrap: '#b8c88a', wrap2: '#6a7a3a', eye: '#9cff4a', angry: '#ff3a1a', horns: true, crown: true } },
+]
+
+// Mutations, in Index tab order. id: save/Index key; multi: income multiplier; weight: roll odds
+// (roster.js rollMutation, after LANE.mutationChance); tab: the Index tab's two colours.
 export const MUTATIONS = [
-  { name: 'Golden', color: '#ffd23a' },
-  { name: 'Ice', color: '#8fe9ff' },
-  { name: 'Lava', color: '#ff6a2a' },
-  { name: 'Shadow', color: '#b48cff' },
+  { id: 'golden', name: 'Golden', color: '#ffd23a', multi: 1.5, weight: 30, tab: ['#fff4a8', '#e8b820'] },
+  { id: 'ice', name: 'Ice', color: '#8fe9ff', multi: 2, weight: 22, tab: ['#e8fbff', '#7fd8f0'] },
+  { id: 'shadow', name: 'Shadow', color: '#b48cff', multi: 2.5, weight: 15, tab: ['#c9a6ff', '#8a4ae8'] },
+  { id: 'jade', name: 'Jade', color: '#8dff5a', multi: 3, weight: 12, tab: ['#d8ff9a', '#6ad83a'] },
+  { id: 'candy', name: 'Candy', color: '#ff8ad8', multi: 3.5, weight: 9, tab: ['#ffd0f0', '#f07ac8'] },
+  { id: 'lava', name: 'Lava', color: '#ff6a2a', multi: 4, weight: 6, tab: ['#ffc46a', '#f08a1a'] },
+  { id: 'crimson', name: 'Crimson', color: '#ff4a4a', multi: 5, weight: 3, tab: ['#ff8a8a', '#e0303a'] },
+  { id: 'lightning', name: 'Lightning', color: '#bfeaff', multi: 6, weight: 1.8, tab: ['#ffffff', '#a8d8f0'] },
+  { id: 'destruction', name: 'Destruction', color: '#9a5aff', multi: 8, weight: 0.9, tab: ['#7a3ae0', '#3a147a'] },
+  { id: 'mastered', name: 'Mastered Aura', color: '#e8ecff', multi: 12, weight: 0.3, tab: ['#ffffff', '#c8c8e8'] },
 ]
 
 // --- Player modes (modes.js) -------------------------------------------------
@@ -342,6 +415,13 @@ export const ANIM = {
     },
     bobY: -0.2,
   },
+  // Holding a hatched fighter in front of the chest (hotbar item selected).
+  carry: {
+    ArmL1: { x: deg(-62), z: deg(-14) },
+    ArmR1: { x: deg(-62), z: deg(14) },
+    ArmL2: { x: deg(38) },
+    ArmR2: { x: deg(38) },
+  },
   transitions: { toLocomotion: 0.14, toAirborne: 0.12, toLanding: 0.06 }, // s to blend a pose change
 }
 
@@ -361,3 +441,120 @@ export function coerceSetting(key, raw) {
   const n = Number(value)
   return clamp(Number.isFinite(n) ? n : Number(spec.def), spec.min, spec.max)
 }
+
+// --- Game server (net.js) ---------------------------------------------------------
+// Progress is saved only there. url = a fixed server (normally empty: on Bloxity the SDK
+// resolves a pod); devUrl is tried by `npm run dev` (the backend's `npm start`).
+export const NET = {
+  url: import.meta.env.VITE_SERVER_URL || '',
+  devUrl: 'ws://localhost:2567',
+  room: 'world',
+  retry: 3, // s before the first reconnect attempt, doubling up to retryMax
+  retryMax: 60,
+  rejoin: 2, // s after a dropped room before rejoining
+}
+
+// --- Treadmill (treadmill.js): the HUD's Treadmill button drops one under you in the safe zone
+// and you run on it, gaining Speed every `every` s (TAP!! adds `tap` x the gain per tap).
+export const TREADMILL = {
+  gain: 100, // Speed per stride tick
+  every: 0.55, // s between ticks
+  critChance: 0.07, // chance a tick is a power stride
+  critMulti: 10, // x gain on a power stride (+1000)
+  tapMulti: 2, // TAP!! bonus: a tap gives gain x tapMulti
+  tapCooldown: 0.12, // s between counted taps
+  runSpeed: 12.5, // m/s the legs animate at (belt speed)
+  beltSpeed: 3.2, // belt texture repeats per s
+  deckHeight: 0.62, // m from the floor to the belt top
+  spawnTime: 0.5, // s for the treadmill to pop up
+  stowTime: 0.35,
+  colors: { body: '#c9b8ff', bodyDark: '#a493e8', trim: '#6f5bd6', belt: '#4a4d5c', chevron: '#e9ecf5', neon: '#57f0ff', screen: '#38e0ff' },
+}
+
+// --- Backpack (backpack.js): the bag button opens the fighter inventory over the hotbar.
+export const BACKPACK = {
+  max: 300, // fighters it holds (backend BACKPACK_MAX)
+}
+
+// --- Windows (src/ui/): Index, Rebirth, Playtime Rewards, Daily Quests, Daily Rewards, Settings ---
+// Nothing here is sold for premium currency: every Skip / boost the reference sold for gems costs $.
+// Roster (roster.js): INDEX.perRarity fighters per RARITIES entry (162 in all), named from the
+// syllables below (original names, fixed by a seed). Collecting INDEX.rewardAt fighters of one
+// mutation unlocks that mutation's base skin ("<Mutation> Base").
+export const INDEX = {
+  perRarity: [16, 16, 15, 15, 14, 14, 13, 13, 12, 12, 11, 11],
+  seed: 1337,
+  rewardAt: 20,
+  first: ['Ka', 'Ze', 'Ro', 'Ta', 'Ve', 'Go', 'Shi', 'Bra', 'Ni', 'Ko', 'Yu', 'Rai', 'Se', 'O', 'Fe', 'Ju', 'Ma', 'Te', 'Ry', 'Ha', 'Do', 'Lu', 'Ken', 'Sa', 'Vol', 'Gri', 'Pa', 'Za', 'Bu', 'Ki', 'To', 'Ga', 'Mi', 'Ra', 'Nu', 'Ji'],
+  last: ['iro', 'nbu', 'kka', 'mo', 'ltra', 'rin', 'ro', 'kk', 'mbo', 'da', 'zan', 'ko', 'nji', 'zuru', 'nn', 'ssa', 'ku', 'run', 'ta', 'tan', 'za', 'rak', 'bi', 'shi', 'ga', 'ji', 'ppa', 'ndo', 'ren', 'gon'],
+  // Titles for the rarer fighters (from Epic up), and numbered units ("Unit 17").
+  titles: ['King', 'Captain', 'Elder', 'Young', 'Dark', 'Super', 'Grand', 'Lord', 'Kid', 'Master', 'Prime', 'Ultra', 'General', 'Sky', 'Iron'],
+  numbered: ['Unit', 'Gamma', 'Model', 'Cyber'],
+}
+
+// Rebirth: needs cash and Speed, resets both, raises the money multiplier (state.moneyMulti()).
+export const REBIRTH = {
+  cash: 1.6e6, // $ needed for the first rebirth, x cashGrowth for each after it
+  cashGrowth: 6,
+  speed: 5000, // Speed needed for the first rebirth, x speedGrowth for each after it
+  speedGrowth: 1.9,
+  multiStep: 0.5, // x1.0 -> x1.5 -> x2.0 ...
+  skipCost: 3, // Skip! (rebirth without the reset or the Speed requirement) costs this x the cash requirement, in $
+}
+
+// Timed boosts. x2 Speed is bought with $ on the left-edge button (price = this share of the
+// current rebirth cash requirement, at least minPrice); x2 Luck comes from the Daily Rewards.
+export const BOOSTS = {
+  speed: { multi: 2, minutes: 15, price: 0.1, minPrice: 50000 },
+  luck: { multi: 2 },
+}
+
+// Playtime Rewards: unlocks = seconds online today (backend PLAYTIME_UNLOCKS, same length).
+// cash is multiplied by the money multiplier; fighter = a roster fighter of that rarity (pick = which one).
+export const PLAYTIME = {
+  unlocks: [30, 90, 180, 300, 600, 1200, 1800, 2400, 3000],
+  rewards: [
+    { cash: 5000 },
+    { fighter: 'Uncommon', pick: 2 },
+    { fighter: 'Rare', pick: 5 },
+    { cash: 25000 },
+    { fighter: 'Epic', pick: 1 },
+    { fighter: 'Legendary', pick: 3 },
+    { cash: 150000 },
+    { fighter: 'Mythical', pick: 0, op: true },
+    { fighter: 'Secret', pick: 2, op: true },
+  ],
+}
+
+// Daily Rewards: one more day unlocks each UTC day (backend daily.ts, DAILY_DAYS = 7).
+// bg = the card's gradient.
+export const DAILY = {
+  days: [
+    { cash: 25000, bg: ['#6ce06a', '#2a9a3a'] },
+    { fighter: 'Rare', pick: 8, bg: ['#7ff0ff', '#1fa8f0'] },
+    { fighter: 'Epic', pick: 6, bg: ['#ff7af0', '#b03ae8'] },
+    { boost: 'luck', minutes: 10, label: 'x2 Luck (10 Mins)', bg: ['#ff6af0', '#a03af0'] },
+    { fighter: 'Legendary', pick: 6, bg: ['#fff27a', '#ffb01f'] },
+    { fighter: 'Mythical', pick: 4, bg: ['#f4f4f8', '#9aa0b0'] },
+    { fighter: 'Secret', pick: 6, op: true, bg: 'rainbow' },
+  ],
+}
+
+// Daily Quests (backend quests.ts QUEST_KINDS). The reward fighter rotates by UTC day; skipping
+// the quests costs skipCost x the current rebirth cash requirement in $.
+export const QUESTS = {
+  text: { hatch: 'Hatch {n} Characters', mutated: 'Hatch {n} Mutated Characters', sell: 'Sell {n} Characters', play: 'Play for {n} Minutes' },
+  rewards: [
+    { fighter: 'Uncommon', pick: 9 },
+    { fighter: 'Rare', pick: 11 },
+    { fighter: 'Epic', pick: 9 },
+    { fighter: 'Rare', pick: 13 },
+    { fighter: 'Legendary', pick: 9 },
+    { fighter: 'Epic', pick: 12 },
+    { fighter: 'Legendary', pick: 11 },
+  ],
+  skipCost: 0.25,
+}
+
+// Settings window defaults (saved with the progress).
+export const GAME_SETTINGS = { lowGfx: false, noVfx: false, muteMusic: false, names: true }

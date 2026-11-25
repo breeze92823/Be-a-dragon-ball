@@ -1,0 +1,656 @@
+/* Game HUD (hud.js). Chunky outlined Fredoka like the reference screens; relative units throughout. */
+.hud {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  font-family: Fredoka, 'Arial Black', sans-serif;
+  font-weight: 700;
+  color: #fff;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --ink: #0b1a3a;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.hud button {
+  font-family: inherit;
+  font-weight: 700;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+.hud .ol {
+  -webkit-text-stroke: 0.12em var(--ink);
+  paint-order: stroke fill;
+}
+
+/* --- Top teleport buttons (safe zone) ---------------------------------------- */
+.hud-top {
+  position: absolute;
+  top: calc(var(--safe-t) + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: clamp(6px, 1.2vw, 18px);
+}
+.hud-tp {
+  width: clamp(78px, 12vw, 232px);
+  height: clamp(40px, 7vh, 68px);
+  border: clamp(2px, 0.3vw, 4px) solid #0b1a3a;
+  border-radius: 4px;
+  padding: 0;
+  font-size: clamp(20px, 3.6vw, 52px);
+  line-height: 1;
+  color: #fff;
+  -webkit-text-stroke: 0.08em #0b1a3a;
+  paint-order: stroke fill;
+  text-shadow: 0 0.06em 0 #0b1a3a;
+  box-shadow: inset 0 -0.35em 0 rgba(0, 0, 0, 0.16), inset 0 0.25em 0 rgba(255, 255, 255, 0.3);
+  transition: transform 0.08s;
+}
+.hud-tp:active {
+  transform: scale(0.94);
+}
+.hud-tp-shop {
+  background: conic-gradient(#1fa8ff 25%, #3cb8ff 0 50%, #1fa8ff 0 75%, #3cb8ff 0) 0 0 / 16px 16px;
+}
+.hud-tp-base {
+  background: conic-gradient(#ffffff 25%, #ffd0ec 0 50%, #ffffff 0 75%, #ffd0ec 0) 0 0 / 16px 16px;
+}
+.hud-tp-sell {
+  background: conic-gradient(#ff1f6a 25%, #ff3c80 0 50%, #ff1f6a 0 75%, #ff3c80 0) 0 0 / 16px 16px;
+}
+.hud.in-lane .hud-top {
+  display: none;
+}
+
+/* --- Lane progress bar -------------------------------------------------------- */
+.hud-lane {
+  position: absolute;
+  top: calc(var(--safe-t) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(48vw, 880px);
+  display: none;
+}
+.hud.in-lane .hud-lane {
+  display: block;
+}
+.hud.running .hud-lane {
+  display: none;
+}
+.lane-bar {
+  position: relative;
+  display: flex;
+  height: clamp(20px, 4.8vh, 50px);
+  border: 4px solid #12091c;
+  border-radius: 4px;
+  background: #12091c;
+  gap: 3px;
+}
+.lane-seg {
+  flex: 1;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.18), inset 0 3px 0 rgba(255, 255, 255, 0.3);
+}
+.lane-marker {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 0;
+  transition: left 0.15s linear;
+}
+.lane-marker .tri {
+  position: absolute;
+  left: -12px;
+  top: -12px;
+  width: 0;
+  height: 0;
+  border-left: 12px solid transparent;
+  border-right: 12px solid transparent;
+  border-bottom: 18px solid #fff;
+  filter: drop-shadow(0 0 2px #0b1a3a) drop-shadow(0 0 1px #0b1a3a);
+}
+.lane-marker .head {
+  position: absolute;
+  left: calc(clamp(34px, 6vh, 56px) / -2);
+  top: 8px;
+  width: clamp(34px, 6vh, 56px);
+  height: clamp(34px, 6vh, 56px);
+  border: 3px solid #0b1a3a;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #8fd0ff;
+}
+.lane-marker .head svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.lane-marker .luck {
+  position: absolute;
+  left: -40px;
+  width: 80px;
+  top: calc(clamp(34px, 6vh, 56px) + 4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: clamp(13px, 2.2vh, 20px);
+  -webkit-text-stroke: 0.14em #0b1a3a;
+  paint-order: stroke fill;
+}
+.lane-marker .luck svg {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+/* --- Run banner, hatch message, vignette, flash ---------------------------------- */
+.hud-run {
+  position: absolute;
+  top: calc(var(--safe-t) + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(46vw, 720px);
+  padding: clamp(4px, 1vh, 10px) 0;
+  border-radius: 12px;
+  background: linear-gradient(#7a0a10, #4a0408);
+  box-shadow: 0 0 0 3px #2a0204, 0 4px 18px rgba(255, 0, 0, 0.35);
+  text-align: center;
+  font-size: clamp(26px, 5.6vh, 56px);
+  line-height: 1.1;
+  display: none;
+}
+.hud-run span {
+  color: #ff4a4a;
+  -webkit-text-stroke: 0.06em #3a0004;
+  paint-order: stroke fill;
+  animation: run-pulse 0.5s ease-in-out infinite alternate;
+  display: inline-block;
+}
+.hud.running .hud-run {
+  display: block;
+}
+@keyframes run-pulse {
+  from {
+    color: #ff2a2a;
+    transform: scale(1);
+  }
+  to {
+    color: #ff9a9a;
+    transform: scale(1.08);
+  }
+}
+.hud-hatch {
+  position: absolute;
+  top: calc(var(--safe-t) + clamp(120px, 24vh, 240px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(94vw, 1100px);
+  text-align: center;
+  font-size: clamp(17px, 3.4vh, 38px);
+  line-height: 1.15;
+  color: #ffd23a;
+  -webkit-text-stroke: 0.12em #5a2a00;
+  paint-order: stroke fill;
+  text-shadow: 0 0.08em 0 #5a2a00;
+  opacity: 0;
+}
+.hud.hatch-show .hud-hatch {
+  animation: hatch-in 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) forwards;
+}
+@keyframes hatch-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+.hud-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(255, 0, 0, 0) 45%, rgba(255, 20, 0, 0.55) 100%);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.hud.running .hud-vignette {
+  opacity: 1;
+  animation: vig 0.75s ease-in-out infinite alternate;
+}
+@keyframes vig {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.hud-flash {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+.hud-flash.go {
+  animation: flash 0.45s ease-out;
+}
+@keyframes flash {
+  from {
+    opacity: 0.75;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* --- Stats (bottom-left) ---------------------------------------------------------- */
+.hud-stats {
+  position: absolute;
+  left: calc(var(--safe-l) + clamp(8px, 1.4vw, 20px));
+  bottom: calc(var(--safe-b) + clamp(8px, 1.6vh, 20px));
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.touch-ui .hud-stats {
+  bottom: calc(var(--safe-b) + clamp(104px, 28vmin, 150px) + 30px);
+}
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 0.18em;
+  font-size: clamp(28px, 7.4vh, 76px);
+  line-height: 1.05;
+  -webkit-text-stroke: 0.08em #0b1a3a;
+  paint-order: stroke fill;
+  text-shadow: 0 0.06em 0 #0b1a3a;
+  transform-origin: left center;
+}
+.stat svg {
+  width: 0.95em;
+  height: 0.85em;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.3));
+}
+.stat.money span {
+  color: #7dff2a;
+}
+.stat.speed span {
+  color: #3fc8ff;
+}
+.stat.pop {
+  animation: stat-pop 0.35s cubic-bezier(0.2, 1.8, 0.4, 1);
+}
+@keyframes stat-pop {
+  0% {
+    transform: scale(1.28);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* --- Menu (right) -------------------------------------------------------------------- */
+.hud-menu {
+  --b: clamp(58px, 12.5vh, 128px);
+  position: absolute;
+  right: calc(var(--safe-r) + clamp(6px, 1vw, 16px));
+  top: 50%;
+  transform: translateY(-38%);
+  display: grid;
+  grid-template-columns: repeat(2, var(--b));
+  gap: clamp(6px, 1.4vh, 14px);
+}
+.touch-ui .hud-menu {
+  --b: clamp(44px, 10vmin, 76px);
+  top: calc(var(--safe-t) + 64px);
+  transform: none;
+}
+.hud-mb {
+  position: relative;
+  width: var(--b);
+  height: var(--b);
+  padding: 0;
+  border: 3px solid #12091c;
+  border-radius: 10px;
+  background: linear-gradient(#4a2a6a, #2a1240);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.18);
+  transition: transform 0.08s;
+}
+.hud-mb:active {
+  transform: scale(0.92);
+}
+.hud-mb svg {
+  position: absolute;
+  left: 12%;
+  top: 4%;
+  width: 76%;
+  height: 76%;
+  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.35));
+}
+.hud-mb span {
+  position: absolute;
+  left: -6%;
+  right: -6%;
+  bottom: -8%;
+  font-size: calc(var(--b) * 0.25);
+  color: #fff;
+  -webkit-text-stroke: 0.14em #0b1a3a;
+  paint-order: stroke fill;
+}
+.hud-mb-treadmill span {
+  color: #ffe14a;
+  background: linear-gradient(90deg, #ff5a5a, #ffd23a, #5bff6a, #3fa2ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 0;
+  filter: drop-shadow(0 0 1px #0b1a3a) drop-shadow(0 0 1px #0b1a3a) drop-shadow(0 0 1px #0b1a3a);
+}
+.hud-mb .badge {
+  position: absolute;
+  top: -14%;
+  right: -10%;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: #ff2a2a;
+  border: 2px solid #fff;
+  font-style: normal;
+  font-size: calc(var(--b) * 0.15);
+  color: #fff;
+}
+.hud-mb .alert {
+  position: absolute;
+  top: -12%;
+  right: -12%;
+  width: 34%;
+  height: 34%;
+  border-radius: 50%;
+  background: #ff2a2a;
+  border: 2px solid #fff;
+  font-style: normal;
+  font-size: calc(var(--b) * 0.24);
+  line-height: 1.2;
+  color: #fff;
+  animation: run-pulse 0.6s ease-in-out infinite alternate;
+}
+
+/* --- Speedometer (bottom-centre, orb only) -------------------------------------------- */
+.hud-speedo {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-b) + 4px);
+  transform: translateX(-50%);
+  width: clamp(200px, 40vh, 400px);
+  aspect-ratio: 320 / 180;
+  display: none;
+}
+.hud.orb .hud-speedo {
+  display: block;
+}
+.hud-speedo svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.hud-speedo .needle {
+  transition: transform 0.08s linear;
+}
+.hud-speedo div {
+  position: absolute;
+  font-size: clamp(20px, 5.4vh, 54px);
+  line-height: 1;
+  -webkit-text-stroke: 0.1em #0b1a3a;
+  paint-order: stroke fill;
+  text-shadow: 0 0.05em 0 #0b1a3a;
+}
+.sp-val {
+  left: 50%;
+  top: -22%;
+  transform: translateX(-50%);
+  color: #ffc21f;
+}
+.sp-min {
+  right: 102%;
+  bottom: 2%;
+  color: #ffd23a;
+}
+.sp-max {
+  left: 102%;
+  bottom: 2%;
+  color: #4a8bff;
+}
+
+/* --- Hotbar (bottom-centre) ----------------------------------------------------------------- */
+.hud-hotbar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-b) + clamp(6px, 1.4vh, 14px));
+  transform: translateX(-50%);
+  display: flex;
+  gap: clamp(4px, 0.8vw, 10px);
+  max-width: 94vw;
+}
+.hud.in-lane:not(.backpack-open) .hud-hotbar {
+  display: none;
+}
+.hb-slot {
+  position: relative;
+  width: clamp(48px, 9vh, 86px);
+  height: clamp(48px, 9vh, 86px);
+  padding: 0;
+  border: 4px solid #ffffff;
+  border-radius: 8px;
+  background: linear-gradient(#24402e, #12241a);
+  box-shadow: 0 0 0 2px #0b1a3a, 0 3px 6px rgba(0, 0, 0, 0.35);
+  transition: transform 0.1s;
+}
+.hb-slot.on {
+  background: linear-gradient(#5be05a, #1f9a2c);
+  transform: translateY(-6px) scale(1.06);
+}
+.hb-slot.empty {
+  background: rgba(18, 36, 26, 0.55);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+.hb-slot img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+.hb-slot .num {
+  position: absolute;
+  left: 4px;
+  top: 0;
+  font-style: normal;
+  font-size: clamp(12px, 2.2vh, 20px);
+  color: #fff;
+  -webkit-text-stroke: 0.14em #0b1a3a;
+  paint-order: stroke fill;
+}
+.hb-slot .nm {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  bottom: -4px;
+  font-style: normal;
+  font-size: clamp(9px, 1.5vh, 14px);
+  color: #fff;
+  -webkit-text-stroke: 0.14em #0b1a3a;
+  paint-order: stroke fill;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Interaction prompt ------------------------------------------------------------------- */
+.hud-prompt {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+}
+.hud-prompt.show {
+  display: flex;
+}
+.hud-prompt .key {
+  position: relative;
+  width: clamp(44px, 6.4vh, 60px);
+  height: clamp(44px, 6.4vh, 60px);
+  border-radius: 10px;
+  background: rgba(20, 20, 28, 0.85);
+  border: 3px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hud-prompt .key b {
+  font-size: clamp(22px, 3.6vh, 32px);
+}
+.hud-prompt .key svg {
+  position: absolute;
+  inset: -9px;
+  width: calc(100% + 18px);
+  height: calc(100% + 18px);
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+.hud-prompt .ring-bg {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0);
+  stroke-width: 3;
+}
+.hud-prompt .ring {
+  fill: none;
+  stroke: #7dff2a;
+  stroke-width: 4;
+  stroke-linecap: round;
+  opacity: 0;
+}
+.hud-prompt.holding .ring {
+  opacity: 1;
+}
+.hud-prompt.holding .key {
+  transform: scale(0.94);
+}
+.hud-prompt .lbl {
+  font-size: clamp(16px, 3vh, 28px);
+  -webkit-text-stroke: 0.14em #0b1a3a;
+  paint-order: stroke fill;
+  white-space: nowrap;
+}
+
+/* --- Small screens -------------------------------------------------------------------------- */
+@media (max-width: 700px) {
+  /* Under the Bloxity toolbar row. */
+  .hud-top,
+  .hud-lane,
+  .hud-run {
+    top: calc(var(--safe-t) + 52px);
+  }
+  .hud-lane {
+    width: 72vw;
+  }
+  .hud-run {
+    width: 70vw;
+  }
+  .hud-hatch {
+    top: calc(var(--safe-t) + 150px);
+  }
+}
+@media (max-height: 500px) {
+  .touch-ui .hud-stats {
+    bottom: calc(var(--safe-b) + 8px);
+    left: calc(var(--safe-l) + clamp(104px, 28vmin, 150px) + 40px);
+  }
+  .stat {
+    font-size: clamp(22px, 7vh, 40px);
+  }
+}
+
+/* Phones: the top-right corner holds the touch buttons and the calendar / settings buttons
+   (ui/*), so the top-centre row drops below them and the menu grid starts under them. */
+@media (max-width: 700px) and (min-height: 501px) {
+  .hud-top,
+  .hud-lane,
+  .hud-run {
+    top: calc(var(--safe-t) + 112px);
+  }
+  .hud-tp {
+    width: clamp(64px, 25vw, 110px);
+  }
+  .hud-hatch {
+    top: calc(var(--safe-t) + 200px);
+  }
+  .touch-ui .hud-menu {
+    top: calc(var(--safe-t) + 176px);
+  }
+}
+@media (max-height: 500px) {
+  /* Phone landscape: 3 x 2 grid under the top-right buttons, clear of the thumb cluster. */
+  .touch-ui .hud-menu {
+    --b: clamp(40px, 11vh, 52px);
+    grid-template-columns: repeat(3, var(--b));
+    top: calc(var(--safe-t) + 100px);
+  }
+  .hud-top,
+  .hud-lane,
+  .hud-run {
+    top: calc(var(--safe-t) + 8px);
+  }
+  .hud-hatch {
+    top: calc(var(--safe-t) + 64px);
+  }
+  .hud-speedo {
+    width: clamp(160px, 34vh, 240px);
+  }
+}
+@media (max-width: 700px) {
+  .hud-speedo {
+    width: clamp(150px, 46vw, 230px);
+  }
+  .hud-speedo div {
+    font-size: clamp(16px, 6vw, 30px);
+  }
+  .sp-min {
+    right: auto;
+    left: 4%;
+    bottom: -2%;
+  }
+  .sp-max {
+    left: auto;
+    right: 4%;
+    bottom: -2%;
+  }
+}
+/* Touch: the speedometer sits above the joystick / jump row. */
+.touch-ui .hud-speedo {
+  bottom: calc(var(--safe-b) + clamp(104px, 28vmin, 150px) + 20px);
+}
+@media (max-height: 500px) {
+  .touch-ui .hud-speedo {
+    bottom: calc(var(--safe-b) + 6px);
+  }
+}
+/* With the Backpack open all 10 slots show: on narrower screens lift the row above the counters. */
+@media (max-width: 1300px) {
+  .hud.backpack-open .hud-hotbar {
+    bottom: calc(var(--safe-b) + clamp(110px, 19vh, 190px));
+  }
+  .hud.backpack-open .hb-slot {
+    width: min(clamp(48px, 9vh, 86px), 8.6vw);
+    height: min(clamp(48px, 9vh, 86px), 8.6vw);
+  }
+}

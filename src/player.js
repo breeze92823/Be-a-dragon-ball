@@ -27,6 +27,32 @@ let controller = null
 let sinceGrounded = 0
 let jumpQueued = 0 // s left on a buffered jump
 
+// Movement profile: the lane swaps it while the player is the orb or a fighter
+// (null = PHYSICS defaults). { speed, accel, decel, airAccel, turnSpeed, jumpSpeed }
+let profile = null
+export function setMoveProfile(p) {
+  profile = p
+}
+// Frozen: the controller stops and the body follows placePlayer() (carried by a guardian).
+let frozen = false
+const held = { x: 0, y: 0, z: 0 }
+export function setFrozen(on) {
+  frozen = on
+  if (on) {
+    held.x = player.position.x
+    held.y = player.position.y
+    held.z = player.position.z
+    player.velocity.x = player.velocity.y = player.velocity.z = 0
+  }
+}
+export const isFrozen = () => frozen
+// Feet position while frozen (applied on the next physics tick, interpolated).
+export function placePlayer(x, y, z) {
+  held.x = x
+  held.y = y
+  held.z = z
+}
+
 export function createPlayerBody() {
   const r = PLAYER_DIMS.radius
   body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(SPAWN.x, SPAWN.y + HALF, SPAWN.z))
@@ -52,6 +78,9 @@ export function resetPlayer(spawn = SPAWN, facing = SPAWN_FACING) {
   player.velocity.x = player.velocity.y = player.velocity.z = 0
   player.grounded = true
   player.facing = facing
+  held.x = spawn.x
+  held.y = spawn.y
+  held.z = spawn.z
   body?.setTranslation({ x: spawn.x, y: spawn.y + HALF, z: spawn.z }, true)
   body?.setNextKinematicTranslation({ x: spawn.x, y: spawn.y + HALF, z: spawn.z })
 }
@@ -89,6 +118,15 @@ function step(dt) {
   prev.y = player.position.y
   prev.z = player.position.z
 
+  if (frozen) {
+    body.setNextKinematicTranslation({ x: held.x, y: held.y + HALF, z: held.z })
+    player.position.x = held.x
+    player.position.y = held.y
+    player.position.z = held.z
+    player.grounded = true
+    return
+  }
+
   // Camera-relative ground basis.
   const yaw = getYaw()
   const fwdX = -Math.sin(yaw)
@@ -100,9 +138,9 @@ function step(dt) {
   const scale = len > 1 ? 1 / len : 1
   const wishX = (fwdX * mv.z + rightX * mv.x) * scale
   const wishZ = (fwdZ * mv.z + rightZ * mv.x) * scale
-  const speed = inputState.sprint ? PHYSICS.sprintSpeed : PHYSICS.walkSpeed
+  const speed = profile ? profile.speed : inputState.sprint ? PHYSICS.sprintSpeed : PHYSICS.walkSpeed
 
-  const rate = !player.grounded ? PHYSICS.airAccel : len > 0.01 ? PHYSICS.accel : PHYSICS.decel
+  const rate = !player.grounded ? (profile?.airAccel ?? PHYSICS.airAccel) : len > 0.01 ? (profile?.accel ?? PHYSICS.accel) : (profile?.decel ?? PHYSICS.decel)
   approach2D(player.velocity, wishX * speed, wishZ * speed, rate * dt)
 
   // Jump: buffered a little before landing, and allowed a little after leaving a ledge.
@@ -113,7 +151,7 @@ function step(dt) {
   sinceGrounded = player.grounded ? 0 : sinceGrounded + dt
   let jumped = false
   if (jumpQueued > 0 && sinceGrounded <= PHYSICS.coyoteTime) {
-    player.velocity.y = PHYSICS.jumpSpeed
+    player.velocity.y = profile?.jumpSpeed ?? PHYSICS.jumpSpeed
     jumpQueued = 0
     sinceGrounded = PHYSICS.coyoteTime + 1
     jumped = true
@@ -149,7 +187,7 @@ function step(dt) {
   // The body turns toward its heading; in first person it always faces the view.
   if (isFirstPerson()) player.facing = yaw + Math.PI
   else if (Math.hypot(wishX, wishZ) > 0.05) {
-    player.facing = rotateTowards(player.facing, Math.atan2(wishX, wishZ), PHYSICS.turnSpeed * dt)
+    player.facing = rotateTowards(player.facing, Math.atan2(wishX, wishZ), (profile?.turnSpeed ?? PHYSICS.turnSpeed) * dt)
   }
 }
 
