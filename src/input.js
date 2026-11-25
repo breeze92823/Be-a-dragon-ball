@@ -59,9 +59,8 @@ export function setTouchSprint(on) {
   recomputeMove()
 }
 
-// Chrome swallows the Esc keydown that releases the captured mouse, so the browser's own unlock is the
-// signal that Esc was pressed: it opens the Boxity menu (a window opening or the portal releasing the
-// mouse is not).
+// Esc with the mouse captured only releases the cursor; the menu needs a second Esc. (ignoreNextUnlock
+// is kept as a no-op-safe hook for callers that free the mouse themselves.)
 let ignoreUnlockUntil = 0
 export const ignoreNextUnlock = () => (ignoreUnlockUntil = performance.now() + 400)
 
@@ -71,7 +70,8 @@ export function install(showMenu, canvasEl, menuOnUnlock = () => true) {
   document.addEventListener('pointerlockchange', () => {
     const now = isLocked()
     if (now) orbiting = false
-    if (wasLocked && !now && performance.now() > ignoreUnlockUntil && menuOnUnlock()) showMenu()
+    // Esc while the mouse is captured only releases it (the browser does that itself); the Boxity
+    // menu opens on the next Esc, when the cursor is already free.
     wasLocked = now
   })
   window.addEventListener('keydown', (e) => {
@@ -79,7 +79,7 @@ export function install(showMenu, canvasEl, menuOnUnlock = () => true) {
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault()
     if (e.repeat) return
     if (e.code === 'Escape') {
-      showMenu()
+      if (!isLocked()) showMenu() // while captured, this Esc just frees the cursor
       return
     }
     held.add(e.code)
