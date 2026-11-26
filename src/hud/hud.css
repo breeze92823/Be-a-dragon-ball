@@ -38,13 +38,21 @@
   gap: clamp(6px, 1.2vw, 18px);
 }
 .hud-tp {
-  width: clamp(78px, 12vw, 232px);
-  height: clamp(40px, 7vh, 68px);
+  /* The label is sized from the button's own box (whichever side is tighter), so it never
+     outgrows it: wide-but-short windows used to get vw-sized text in a vh-capped button. */
+  --tp-w: clamp(78px, 12vw, 232px);
+  --tp-h: clamp(40px, 7vh, 68px);
+  width: var(--tp-w);
+  height: var(--tp-h);
   border: clamp(2px, 0.3vw, 4px) solid #0b1a3a;
   border-radius: 4px;
   padding: 0;
-  font-size: clamp(20px, 3.6vw, 52px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: min(calc(var(--tp-h) * 0.56), calc(var(--tp-w) * 0.26));
   line-height: 1;
+  white-space: nowrap;
   color: #fff;
   -webkit-text-stroke: 0.08em #0b1a3a;
   paint-order: stroke fill;
@@ -589,7 +597,7 @@
     top: calc(var(--safe-t) + 112px);
   }
   .hud-tp {
-    width: clamp(64px, 25vw, 110px);
+    --tp-w: clamp(64px, 25vw, 110px);
   }
   .hud-hatch {
     top: calc(var(--safe-t) + 200px);
